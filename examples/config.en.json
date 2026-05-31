@@ -1,0 +1,73 @@
+{
+  "future_days": 730,
+  "past_days": 365,
+  "blacklist_note_marker": "#NB",
+  "month_names": [
+    "", "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ],
+  "suffix": "-auto-contact-dates",
+  "displayname_prefix": "Contact dates",
+  "prodid": "-//radicale-contact-dates//EN",
+  "collections": {
+    "*/contacts": {"enabled": true},
+    "*/archived-contacts": {"enabled": false}
+  },
+  "date_types": {
+    "birthday": {
+      "enabled": true,
+      "source": "BDAY",
+      "category": "Birthday",
+      "alarms": [
+        {"days_before": 7, "at": "11:30"},
+        {"days_before": 1, "at": "11:30"},
+        {"days_before": 0, "at": "11:30"}
+      ],
+      "templates": {
+        "summary_with_count": "🎂 {name} turns {count}",
+        "summary_no_count": "🎂 {name}'s birthday",
+        "alarm_before_with_count": "🎂 {name} turns {count} on {date}",
+        "alarm_before_no_count": "🎂 {name}'s birthday on {date}",
+        "alarm_day_with_count": "🎂 {name} turns {count} today",
+        "alarm_day_no_count": "🎂 {name}'s birthday today"
+      }
+    },
+    "anniversary": {
+      "enabled": true,
+      "source": "ANNIVERSARY",
+      "apple_label": "Anniversary",
+      "category": "Anniversary",
+      "alarms": [
+        {"days_before": 7, "at": "11:30"},
+        {"days_before": 1, "at": "11:30"},
+        {"days_before": 0, "at": "11:30"}
+      ],
+      "templates": {
+        "summary_with_count": "💍 {name} — {ordinal} anniversary",
+        "summary_no_count": "💍 {name}'s anniversary",
+        "alarm_before_with_count": "💍 {name}'s {ordinal} anniversary on {date}",
+        "alarm_before_no_count": "💍 {name}'s anniversary on {date}",
+        "alarm_day_with_count": "💍 {name}'s {ordinal} anniversary today",
+        "alarm_day_no_count": "💍 {name}'s anniversary today"
+      }
+    },
+    "other_dates": {
+      "enabled": false,
+      "match": "x-abdate-any",
+      "category": "Important date",
+      "alarms": [
+        {"days_before": 7, "at": "11:30"},
+        {"days_before": 1, "at": "11:30"},
+        {"days_before": 0, "at": "11:30"}
+      ],
+      "templates": {
+        "summary_with_count": "📅 {name} — {label} ({count})",
+        "summary_no_count": "📅 {name} — {label}",
+        "alarm_before_with_count": "📅 {name} — {label} ({count}) on {date}",
+        "alarm_before_no_count": "📅 {name} — {label} on {date}",
+        "alarm_day_with_count": "📅 {name} — {label} ({count}) today",
+        "alarm_day_no_count": "📅 {name} — {label} today"
+      }
+    }
+  }
+}

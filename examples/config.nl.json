@@ -1,0 +1,73 @@
+{
+  "future_days": 730,
+  "past_days": 365,
+  "blacklist_note_marker": "#NB",
+  "month_names": [
+    "", "januari", "februari", "maart", "april", "mei", "juni",
+    "juli", "augustus", "september", "oktober", "november", "december"
+  ],
+  "suffix": "-auto-contact-dates",
+  "displayname_prefix": "Contactdatums",
+  "prodid": "-//radicale-contact-dates//EN",
+  "collections": {
+    "*/contacts": {"enabled": true},
+    "*/archived-contacts": {"enabled": false}
+  },
+  "date_types": {
+    "birthday": {
+      "enabled": true,
+      "source": "BDAY",
+      "category": "Verjaardag",
+      "alarms": [
+        {"days_before": 7, "at": "11:30"},
+        {"days_before": 1, "at": "11:30"},
+        {"days_before": 0, "at": "11:30"}
+      ],
+      "templates": {
+        "summary_with_count": "🎂 {name} wordt {count}",
+        "summary_no_count": "🎂 {name} is jarig",
+        "alarm_before_with_count": "🎂 {name} wordt {count} op {date}",
+        "alarm_before_no_count": "🎂 {name} is jarig op {date}",
+        "alarm_day_with_count": "🎂 {name} wordt vandaag {count}",
+        "alarm_day_no_count": "🎂 {name} is vandaag jarig"
+      }
+    },
+    "anniversary": {
+      "enabled": true,
+      "source": "ANNIVERSARY",
+      "apple_label": "Anniversary",
+      "category": "Jubileum",
+      "alarms": [
+        {"days_before": 7, "at": "11:30"},
+        {"days_before": 1, "at": "11:30"},
+        {"days_before": 0, "at": "11:30"}
+      ],
+      "templates": {
+        "summary_with_count": "💍 {name} — {count}e jubileum",
+        "summary_no_count": "💍 {name} — jubileum",
+        "alarm_before_with_count": "💍 {name} — {count}e jubileum op {date}",
+        "alarm_before_no_count": "💍 {name} — jubileum op {date}",
+        "alarm_day_with_count": "💍 {name} — vandaag {count}e jubileum",
+        "alarm_day_no_count": "💍 {name} — vandaag jubileum"
+      }
+    },
+    "other_dates": {
+      "enabled": false,
+      "match": "x-abdate-any",
+      "category": "Belangrijke datum",
+      "alarms": [
+        {"days_before": 7, "at": "11:30"},
+        {"days_before": 1, "at": "11:30"},
+        {"days_before": 0, "at": "11:30"}
+      ],
+      "templates": {
+        "summary_with_count": "📅 {name} — {label} ({count})",
+        "summary_no_count": "📅 {name} — {label}",
+        "alarm_before_with_count": "📅 {name} — {label} ({count}) op {date}",
+        "alarm_before_no_count": "📅 {name} — {label} op {date}",
+        "alarm_day_with_count": "📅 {name} — {label} ({count}) vandaag",
+        "alarm_day_no_count": "📅 {name} — {label} vandaag"
+      }
+    }
+  }
+}

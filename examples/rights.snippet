@@ -1,0 +1,11 @@
+# Radicale `from_file` rights — make the generated contact-date calendars
+# read-only.
+#
+# Place this block BEFORE your read-write rules: Radicale uses first-match-wins,
+# so this rule must win for the "*-auto-contact-dates" collections before any
+# broader `rw` rule grants write access.
+
+[auto-contact-dates-readonly]
+user: .+
+collection: .*-auto-contact-dates(/.*)?
+permissions: r

@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.ruff_cache/
+*.log
+*.tmp
+*.ics
+.DS_Store
+
+# Internal planning/scaffolding — not part of the public release.
+docs/plans/

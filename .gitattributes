@@ -1,0 +1,2 @@
+# vCard fixtures must preserve CRLF line endings (RFC 6350 / test fidelity).
+*.vcf -text
