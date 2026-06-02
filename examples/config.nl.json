@@ -19,56 +19,50 @@
       "enabled": true,
       "source": "BDAY",
       "category": "Verjaardag",
-      "alarms": [
-        {"days_before": 7, "at": "11:30"},
-        {"days_before": 1, "at": "11:30"},
-        {"days_before": 0, "at": "11:30"}
-      ],
-      "templates": {
-        "summary_with_count": "🎂 {name} wordt {count}",
-        "summary_no_count": "🎂 {name} is jarig",
-        "alarm_before_with_count": "🎂 {name} wordt {count} op {date}",
-        "alarm_before_no_count": "🎂 {name} is jarig op {date}",
-        "alarm_day_with_count": "🎂 {name} wordt vandaag {count}",
-        "alarm_day_no_count": "🎂 {name} is vandaag jarig"
-      }
+      "reminders": [
+        {"days_before": 0, "at": "11:30", "type": "event",
+         "template": "🎂 {name} is jarig ({count} jaar)",
+         "template_unknown": "🎂 {name} is jarig"},
+        {"days_before": 7, "at": "11:30", "type": "alarm",
+         "template": "🎂 {name} is volgende week jarig op {date} ({count} jaar)",
+         "template_unknown": "🎂 {name} is volgende week jarig op {date}"},
+        {"days_before": 1, "at": "11:30", "type": "alarm",
+         "template": "🎂 {name} is morgen jarig ({count} jaar)",
+         "template_unknown": "🎂 {name} is morgen jarig"}
+      ]
     },
     "anniversary": {
       "enabled": true,
       "source": "ANNIVERSARY",
       "apple_label": "Anniversary",
       "category": "Jubileum",
-      "alarms": [
-        {"days_before": 7, "at": "11:30"},
-        {"days_before": 1, "at": "11:30"},
-        {"days_before": 0, "at": "11:30"}
-      ],
-      "templates": {
-        "summary_with_count": "💍 {name} — {count}e jubileum",
-        "summary_no_count": "💍 {name} — jubileum",
-        "alarm_before_with_count": "💍 {name} — {count}e jubileum op {date}",
-        "alarm_before_no_count": "💍 {name} — jubileum op {date}",
-        "alarm_day_with_count": "💍 {name} — vandaag {count}e jubileum",
-        "alarm_day_no_count": "💍 {name} — vandaag jubileum"
-      }
+      "reminders": [
+        {"days_before": 0, "at": "11:30", "type": "event",
+         "template": "💍 {name} — {count}e jubileum",
+         "template_unknown": "💍 {name} — jubileum"},
+        {"days_before": 7, "at": "11:30", "type": "alarm",
+         "template": "💍 {name} — volgende week {count}e jubileum op {date}",
+         "template_unknown": "💍 {name} — volgende week jubileum op {date}"},
+        {"days_before": 1, "at": "11:30", "type": "alarm",
+         "template": "💍 {name} — morgen {count}e jubileum",
+         "template_unknown": "💍 {name} — morgen jubileum"}
+      ]
     },
     "other_dates": {
       "enabled": false,
       "match": "x-abdate-any",
       "category": "Belangrijke datum",
-      "alarms": [
-        {"days_before": 7, "at": "11:30"},
-        {"days_before": 1, "at": "11:30"},
-        {"days_before": 0, "at": "11:30"}
-      ],
-      "templates": {
-        "summary_with_count": "📅 {name} — {label} ({count})",
-        "summary_no_count": "📅 {name} — {label}",
-        "alarm_before_with_count": "📅 {name} — {label} ({count}) op {date}",
-        "alarm_before_no_count": "📅 {name} — {label} op {date}",
-        "alarm_day_with_count": "📅 {name} — {label} ({count}) vandaag",
-        "alarm_day_no_count": "📅 {name} — {label} vandaag"
-      }
+      "reminders": [
+        {"days_before": 0, "at": "11:30", "type": "event",
+         "template": "📅 {name} — {label} ({count})",
+         "template_unknown": "📅 {name} — {label}"},
+        {"days_before": 7, "at": "11:30", "type": "alarm",
+         "template": "📅 {name} — {label} op {date} ({count})",
+         "template_unknown": "📅 {name} — {label} op {date}"},
+        {"days_before": 1, "at": "11:30", "type": "alarm",
+         "template": "📅 {name} — morgen {label} ({count})",
+         "template_unknown": "📅 {name} — morgen {label}"}
+      ]
     }
   }
 }

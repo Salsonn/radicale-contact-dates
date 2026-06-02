@@ -26,14 +26,6 @@ DEFAULT_MONTHS = [
     "July", "August", "September", "October", "November", "December",
 ]
 DEFAULT_DATE_FORMAT = "{day} {month}"
-DEFAULT_REMINDER_DURATION = "PT1M"
-
-# Shared alarm schedule reused by every shipped date_type.
-_DEFAULT_ALARMS = [
-    {"days_before": 7, "at": "11:30"},
-    {"days_before": 1, "at": "11:30"},
-    {"days_before": 0, "at": "11:30"},
-]
 
 
 # --- vCard parsing --------------------------------------------------------
@@ -254,29 +246,6 @@ def alarm_trigger(days_before, at):
     )
 
 
-_ISO_DURATION_RE = re.compile(
-    r"^(?P<sign>[+-]?)P(?:(?P<days>\d+)D)?"
-    r"(?:T(?:(?P<h>\d+)H)?(?:(?P<m>\d+)M)?(?:(?P<s>\d+)S)?)?$"
-)
-
-
-def parse_iso_duration(value):
-    """ISO 8601 duration (subset) -> timedelta; ValueError if invalid.
-
-    Supports days and time components: ``PT1M``, ``PT1M30S``, ``PT0S``,
-    ``P1DT2H3M4S``. At least one numeric component is required.
-    """
-    m = _ISO_DURATION_RE.match(value or "")
-    if not m:
-        raise ValueError("invalid ISO 8601 duration: %r" % (value,))
-    parts = (m.group("days"), m.group("h"), m.group("m"), m.group("s"))
-    if all(p is None for p in parts):
-        raise ValueError("empty ISO 8601 duration: %r" % (value,))
-    days, hours, mins, secs = (int(p) if p else 0 for p in parts)
-    delta = _dt.timedelta(days=days, hours=hours, minutes=mins, seconds=secs)
-    return -delta if m.group("sign") == "-" else delta
-
-
 # --- ICS escaping / folding ----------------------------------------------
 
 def ics_escape(value):
@@ -322,50 +291,66 @@ DEFAULT_CONFIG = {
             "enabled": True,
             "source": "BDAY",
             "category": "Birthday",
-            "alarms": _DEFAULT_ALARMS,
-            "templates": {
-                "summary_with_count": "🎂 {name} turns {count}",
-                "summary_no_count": "🎂 {name}'s birthday",
-                "alarm_before_with_count": "🎂 {name} turns {count} on {date}",
-                "alarm_before_no_count": "🎂 {name}'s birthday on {date}",
-                "alarm_day_with_count": "🎂 {name} turns {count} today",
-                "alarm_day_no_count": "🎂 {name}'s birthday today",
-            },
+            "reminders": [
+                {"days_before": 0, "at": "11:30", "type": "event",
+                 "template": "🎂 {name} turns {count}",
+                 "template_unknown": "🎂 {name}'s birthday"},
+                {"days_before": 7, "at": "11:30", "type": "alarm",
+                 "template": "🎂 {name} turns {count} on {date}",
+                 "template_unknown": "🎂 {name}'s birthday on {date}"},
+                {"days_before": 1, "at": "11:30", "type": "alarm",
+                 "template": "🎂 {name} turns {count} tomorrow",
+                 "template_unknown": "🎂 {name}'s birthday tomorrow"},
+            ],
         },
         "anniversary": {
             "enabled": True,
             "source": "ANNIVERSARY",
             "apple_label": "Anniversary",
             "category": "Anniversary",
-            "alarms": _DEFAULT_ALARMS,
-            "templates": {
-                "summary_with_count": "💍 {name} — {ordinal} anniversary",
-                "summary_no_count": "💍 {name}'s anniversary",
-                "alarm_before_with_count":
-                    "💍 {name}'s {ordinal} anniversary on {date}",
-                "alarm_before_no_count": "💍 {name}'s anniversary on {date}",
-                "alarm_day_with_count":
-                    "💍 {name}'s {ordinal} anniversary today",
-                "alarm_day_no_count": "💍 {name}'s anniversary today",
-            },
+            "reminders": [
+                {"days_before": 0, "at": "11:30", "type": "event",
+                 "template": "💍 {name}'s {count_english} anniversary",
+                 "template_unknown": "💍 {name}'s anniversary"},
+                {"days_before": 7, "at": "11:30", "type": "alarm",
+                 "template": "💍 {name}'s {count_english} anniversary on {date}",
+                 "template_unknown": "💍 {name}'s anniversary on {date}"},
+                {"days_before": 1, "at": "11:30", "type": "alarm",
+                 "template": "💍 {name}'s {count_english} anniversary tomorrow",
+                 "template_unknown": "💍 {name}'s anniversary tomorrow"},
+            ],
         },
         "other_dates": {
             "enabled": False,
             "match": "x-abdate-any",
             "category": "Important date",
-            "alarms": _DEFAULT_ALARMS,
-            "templates": {
-                "summary_with_count": "📅 {name} — {label} ({count})",
-                "summary_no_count": "📅 {name} — {label}",
-                "alarm_before_with_count":
-                    "📅 {name} — {label} ({count}) on {date}",
-                "alarm_before_no_count": "📅 {name} — {label} on {date}",
-                "alarm_day_with_count": "📅 {name} — {label} ({count}) today",
-                "alarm_day_no_count": "📅 {name} — {label} today",
-            },
+            "reminders": [
+                {"days_before": 0, "at": "11:30", "type": "event",
+                 "template": "📅 {name} — {label} ({count})",
+                 "template_unknown": "📅 {name} — {label}"},
+                {"days_before": 7, "at": "11:30", "type": "alarm",
+                 "template": "📅 {name} — {label} ({count}) on {date}",
+                 "template_unknown": "📅 {name} — {label} on {date}"},
+                {"days_before": 1, "at": "11:30", "type": "alarm",
+                 "template": "📅 {name} — {label} ({count}) tomorrow",
+                 "template_unknown": "📅 {name} — {label} tomorrow"},
+            ],
         },
     },
 }
+
+
+def validate_config(cfg):
+    """Raise ``ValueError`` if an enabled ``date_type`` has no ``type: "event"``
+    reminder. Alarms are hosted on an event, so at least one is required."""
+    for name, tc in cfg.get("date_types", {}).items():
+        if not tc.get("enabled"):
+            continue
+        reminders = tc.get("reminders", [])
+        if not any(r.get("type") == "event" for r in reminders):
+            raise ValueError(
+                "date_type %r must have at least one reminder with "
+                "type 'event' (alarms need an event to host them)" % (name,))
 
 
 # --- Occurrence window -----------------------------------------------------
@@ -422,162 +407,105 @@ def _ctx(name, count, month, day, year, months, label=None,
     }
 
 
-def _alarm_text(name, count, month, day, label, days_before, type_cfg,
-                months, date_format=DEFAULT_DATE_FORMAT):
-    """Render the alarm/reminder line for a given lead time.
-
-    ``days_before > 0`` -> the ``alarm_before_*`` template; otherwise the
-    ``alarm_day_*`` template. ``*_with_count`` when the year is known, else
-    ``*_no_count``."""
-    tpls = type_cfg["templates"]
+def _reminder_text(reminder, name, count, month, day, label, months,
+                   date_format=DEFAULT_DATE_FORMAT):
+    """Render a reminder's ``template`` (``template_unknown`` when the year is
+    unknown). ``month``/``day`` are the occurrence's, so ``{date}`` is the date
+    itself even for an advance reminder."""
+    key = "template" if count is not None else "template_unknown"
+    tpl = reminder.get(key) or reminder.get("template", "")
     ctx = _ctx(name, count, month, day, None, months, label=label,
                date_format=date_format)
-    if int(days_before) > 0:
-        key = ("alarm_before_with_count" if count is not None
-               else "alarm_before_no_count")
-    else:
-        key = ("alarm_day_with_count" if count is not None
-               else "alarm_day_no_count")
-    return render(tpls[key], **ctx)
+    return render(tpl, **ctx)
 
 
-def _valarms(name, count, month, day, label, type_cfg, months,
-             date_format=DEFAULT_DATE_FORMAT):
-    lines = []
-    for al in type_cfg.get("alarms", []):
-        if al.get("type", "alarm") == "event":
-            continue  # rendered as a separate reminder VEVENT instead
-        desc = ics_escape(_alarm_text(name, count, month, day, label,
-                                      al["days_before"], type_cfg, months,
-                                      date_format))
-        lines += [
-            "BEGIN:VALARM",
-            "ACTION:DISPLAY",
-            "TRIGGER:" + alarm_trigger(al["days_before"], al["at"]),
-            "DESCRIPTION:" + desc,
-            "END:VALARM",
-        ]
-    return lines
+def _trigger_for(occ_date, days_before, at, host_date):
+    """ICS TRIGGER for a VALARM that fires ``days_before`` days before
+    ``occ_date`` at ``at``, expressed relative to the host all-day event's
+    ``host_date`` (DTSTART at local midnight)."""
+    h, m = (int(x) for x in at.split(":"))
+    moment = (_dt.datetime(occ_date.year, occ_date.month, occ_date.day, h, m)
+              - _dt.timedelta(days=int(days_before)))
+    host0 = _dt.datetime(host_date.year, host_date.month, host_date.day)
+    return format_ical_duration(moment - host0)
+
+
+def _valarm_lines(occ_date, reminder, host_date, name, count, label, months,
+                  date_format):
+    """VALARM lines for ``reminder`` hosted on the event at ``host_date``;
+    [] when the reminder has no ``at`` (no popup)."""
+    at = reminder.get("at")
+    if not at:
+        return []
+    desc = ics_escape(_reminder_text(reminder, name, count, occ_date.month,
+                                     occ_date.day, label, months, date_format))
+    return [
+        "BEGIN:VALARM",
+        "ACTION:DISPLAY",
+        "TRIGGER:" + _trigger_for(occ_date, reminder.get("days_before", 0),
+                                  at, host_date),
+        "DESCRIPTION:" + desc,
+        "END:VALARM",
+    ]
 
 
 def _utcstamp():
     return _dt.datetime.now(_dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
-def _build_event(type_name, source_uid, uid_suffix, name, start, count, label,
-                 type_cfg, months, rrule, date_format=DEFAULT_DATE_FORMAT):
-    tpls = type_cfg["templates"]
-    category = type_cfg.get("category", "")
-    skey = "summary_with_count" if count is not None else "summary_no_count"
-    summary = ics_escape(
-        render(tpls[skey],
-               **_ctx(name, count, start.month, start.day, start.year, months,
-                      label=label, date_format=date_format))
-    )
-    end = start + _dt.timedelta(days=1)
+def _build_reminder_vevent(type_name, uid_suffix, source_uid, name, occ_date,
+                           event_date, count, label, reminder, alarms,
+                           category, months, date_format, rrule):
+    """An all-day VEVENT on ``event_date`` for one ``type: "event"`` reminder.
+
+    SUMMARY and DESCRIPTION come from the reminder's template; it carries its
+    own popup VALARM (at its ``at``) plus the VALARMs for each ``alarm`` hosted
+    on it."""
+    text = ics_escape(_reminder_text(reminder, name, count, occ_date.month,
+                                     occ_date.day, label, months, date_format))
+    end = event_date + _dt.timedelta(days=1)
     lines = [
         "BEGIN:VEVENT",
         "UID:auto-%s-%s@radicale" % (type_name, uid_suffix),
         "DTSTAMP:" + _utcstamp(),
-        "DTSTART;VALUE=DATE:%s" % start.strftime("%Y%m%d"),
+        "DTSTART;VALUE=DATE:%s" % event_date.strftime("%Y%m%d"),
         "DTEND;VALUE=DATE:%s" % end.strftime("%Y%m%d"),
     ]
     if rrule:
         lines.append("RRULE:FREQ=YEARLY")
     lines += [
-        "SUMMARY:" + summary,
+        "SUMMARY:" + text,
+        "DESCRIPTION:" + text,
         "TRANSP:TRANSPARENT",
         "CATEGORIES:" + category,
         "X-AUTO-CONTACT-DATE-SOURCE:" + source_uid,
     ]
-    lines += _valarms(name, count, start.month, start.day, label, type_cfg,
-                      months, date_format)
+    lines += _valarm_lines(occ_date, reminder, event_date, name, count, label,
+                           months, date_format)
+    for al in alarms:
+        lines += _valarm_lines(occ_date, al, event_date, name, count, label,
+                               months, date_format)
     lines.append("END:VEVENT")
     return "\r\n".join(fold_line(x) for x in lines)
 
 
-def build_event_known(type_name, uid, name, date, count, label, type_cfg,
-                      months, date_format=DEFAULT_DATE_FORMAT):
-    return _build_event(type_name, uid, "%s-%d" % (uid, date.year), name, date,
-                        count, label, type_cfg, months, False, date_format)
-
-
-def build_event_unknown(type_name, uid, name, month, day, start_year, label,
-                        type_cfg, months, date_format=DEFAULT_DATE_FORMAT):
-    start = _safe_date(start_year, month, day)
-    return _build_event(type_name, uid, uid, name, start, None, label,
-                        type_cfg, months, True, date_format)
-
-
-# --- Reminder events (alarm "type": "event") ------------------------------
-
-def _build_reminder_event(type_name, uid_suffix, name, start_dt, duration,
-                          text, category, source_uid, rrule):
-    """A timed reminder VEVENT carrying the alarm text as its ``SUMMARY``, plus
-    a single ``TRIGGER:PT0S`` VALARM so even clients that ignore alarm
-    descriptions still notify with the right text. ``start_dt`` is a floating
-    local DATE-TIME (no ``Z``/``TZID``), so no ``VTIMEZONE`` is needed."""
-    end_dt = start_dt + duration
-    esc = ics_escape(text)
-    lines = [
-        "BEGIN:VEVENT",
-        "UID:auto-%s-%s@radicale" % (type_name, uid_suffix),
-        "DTSTAMP:" + _utcstamp(),
-        "DTSTART:" + start_dt.strftime("%Y%m%dT%H%M%S"),
-        "DTEND:" + end_dt.strftime("%Y%m%dT%H%M%S"),
-    ]
-    if rrule:
-        lines.append("RRULE:FREQ=YEARLY")
-    lines += [
-        "SUMMARY:" + esc,
-        "TRANSP:TRANSPARENT",
-        "CATEGORIES:" + category,
-        "X-AUTO-CONTACT-DATE-SOURCE:" + source_uid,
-        "BEGIN:VALARM",
-        "ACTION:DISPLAY",
-        "TRIGGER:PT0S",
-        "DESCRIPTION:" + esc,
-        "END:VALARM",
-        "END:VEVENT",
-    ]
-    return "\r\n".join(fold_line(x) for x in lines)
-
-
-def _reminder_start(occ_date, days_before, at):
-    """Floating-local datetime ``days_before`` days before ``occ_date`` at
-    ``at`` (``HH:MM``)."""
-    h, m = (int(x) for x in at.split(":"))
-    rdate = occ_date - _dt.timedelta(days=int(days_before))
-    return _dt.datetime(rdate.year, rdate.month, rdate.day, h, m)
-
-
-def build_reminder_event_known(type_name, uid, name, occ_date, count, label,
-                               alarm, type_cfg, months,
-                               date_format=DEFAULT_DATE_FORMAT, index=0):
-    start_dt = _reminder_start(occ_date, alarm["days_before"], alarm["at"])
-    duration = parse_iso_duration(
-        alarm.get("duration", DEFAULT_REMINDER_DURATION))
-    text = _alarm_text(name, count, occ_date.month, occ_date.day, label,
-                       alarm["days_before"], type_cfg, months, date_format)
-    uid_suffix = "%s-%d-r%d" % (uid, occ_date.year, index)
-    return _build_reminder_event(
-        type_name, uid_suffix, name, start_dt, duration, text,
-        type_cfg.get("category", ""), uid, False)
-
-
-def build_reminder_event_unknown(type_name, uid, name, month, day, start_year,
-                                 label, alarm, type_cfg, months,
-                                 date_format=DEFAULT_DATE_FORMAT, index=0):
-    occ_date = _safe_date(start_year, month, day)
-    start_dt = _reminder_start(occ_date, alarm["days_before"], alarm["at"])
-    duration = parse_iso_duration(
-        alarm.get("duration", DEFAULT_REMINDER_DURATION))
-    text = _alarm_text(name, None, month, day, label, alarm["days_before"],
-                       type_cfg, months, date_format)
-    uid_suffix = "%s-r%d" % (uid, index)
-    return _build_reminder_event(
-        type_name, uid_suffix, name, start_dt, duration, text,
-        type_cfg.get("category", ""), uid, True)
+def _split_reminders(type_cfg):
+    """(events, alarms, host_index) for a date_type. ``events`` is a list of
+    ``(index, reminder)`` for ``type: "event"`` reminders; ``alarms`` the
+    ``type: "alarm"`` reminders; ``host_index`` the events-list position whose
+    ``days_before`` is closest to 0 (where alarms are hosted), or None."""
+    events, alarms = [], []
+    for i, r in enumerate(type_cfg.get("reminders", [])):
+        if r.get("type") == "event":
+            events.append((i, r))
+        elif r.get("type") == "alarm":
+            alarms.append(r)
+    host_index = None
+    if events:
+        host_index = min(
+            range(len(events)),
+            key=lambda k: abs(int(events[k][1].get("days_before", 0))))
+    return events, alarms, host_index
 
 
 # --- Desired set ----------------------------------------------------------
@@ -629,49 +557,46 @@ def desired_items(contacts, today, cfg):
             continue
         name = c.get("fn") or "?"
         for type_name, type_cfg in enabled:
-            event_alarms = [
-                (i, al) for i, al in enumerate(type_cfg.get("alarms", []))
-                if al.get("type", "alarm") == "event"
-            ]
+            events, alarms, host_index = _split_reminders(type_cfg)
+            if not events:
+                continue
+            category = type_cfg.get("category", "")
             for month, day, year, label in dates_for_type(c, type_name,
                                                           type_cfg):
                 if year is None:
                     today_occ = _safe_date(today.year, month, day)
                     start_year = (today.year if today_occ >= today
                                   else today.year + 1)
-                    ev = build_event_unknown(
-                        type_name, uid, name, month, day, start_year, label,
-                        type_cfg, months, date_format)
-                    out["auto-%s-%s.ics" % (type_name, uid)] = _wrap(
-                        ev, prodid)
-                    for i, al in event_alarms:
-                        rev = build_reminder_event_unknown(
-                            type_name, uid, name, month, day, start_year,
-                            label, al, type_cfg, months, date_format, i)
+                    occ_date = _safe_date(start_year, month, day)
+                    for k, (i, r) in enumerate(events):
+                        db = int(r.get("days_before", 0))
+                        event_date = occ_date - _dt.timedelta(days=db)
+                        hosted = alarms if k == host_index else []
+                        ev = _build_reminder_vevent(
+                            type_name, "%s-r%d" % (uid, i), uid, name,
+                            occ_date, event_date, None, label, r, hosted,
+                            category, months, date_format, True)
                         fn = "auto-%s-%s-r%d.ics" % (type_name, uid, i)
-                        out[fn] = _wrap(rev, prodid)
+                        out[fn] = _wrap(ev, prodid)
                 else:
-                    for date, count in occurrences_known(
+                    for occ_date, count in occurrences_known(
                             today, month, day, year, future_days, past_days):
-                        ev = build_event_known(
-                            type_name, uid, name, date, count, label,
-                            type_cfg, months, date_format)
-                        out["auto-%s-%s-%d.ics" % (
-                            type_name, uid, date.year)] = _wrap(ev, prodid)
-                        for i, al in event_alarms:
-                            days_before = int(al["days_before"])
-                            rdate = date - _dt.timedelta(days=days_before)
-                            # Prune spent "before" reminders once their day has
-                            # passed; keep day-of (0d) reminders (they follow
-                            # the occurrence window, like the main event).
-                            if days_before > 0 and rdate < today:
+                        for k, (i, r) in enumerate(events):
+                            db = int(r.get("days_before", 0))
+                            event_date = occ_date - _dt.timedelta(days=db)
+                            # Prune spent advance events once their day passed;
+                            # keep the day-of event (and its hosted alarms).
+                            if db > 0 and event_date < today:
                                 continue
-                            rev = build_reminder_event_known(
-                                type_name, uid, name, date, count, label,
-                                al, type_cfg, months, date_format, i)
+                            hosted = alarms if k == host_index else []
+                            ev = _build_reminder_vevent(
+                                type_name,
+                                "%s-%d-r%d" % (uid, occ_date.year, i), uid,
+                                name, occ_date, event_date, count, label, r,
+                                hosted, category, months, date_format, False)
                             fn = "auto-%s-%s-%d-r%d.ics" % (
-                                type_name, uid, date.year, i)
-                            out[fn] = _wrap(rev, prodid)
+                                type_name, uid, occ_date.year, i)
+                            out[fn] = _wrap(ev, prodid)
     return out
 
 
@@ -835,6 +760,7 @@ def _collection_settings(coll, collections):
 
 
 def sync(root, cfg, today, dry_run=False, only_collection=None, verbose=False):
+    validate_config(cfg)
     summary = {"create": 0, "update": 0, "delete": 0, "collections": {}}
     collections_cfg = cfg.get("collections", {})
     suffix = cfg.get("suffix", "-auto-contact-dates")

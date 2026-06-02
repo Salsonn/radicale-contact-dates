@@ -19,10 +19,13 @@ emoji in the title (🎂 / 💍 / 📅).
 
 ## What it does
 
-For every contact, each enabled **date type** emits one all-day VEVENT per
-occurrence with a few reminder `VALARM`s. Below are two real generated events for
-a contact (`Casey Example`) born 1980-04-10 with a wedding anniversary on
-2001-04-10.
+For every contact, each enabled **date type** emits, per occurrence, an all-day
+VEVENT for the date itself (its `SUMMARY` **and** `DESCRIPTION` hold the text)
+that hosts a few reminder `VALARM`s. Each reminder is configured as either an
+`alarm` (a `VALARM` on this event) or its own `event` — see
+[`reminders`](#reminders). Below is a real generated birthday for a contact
+(`Casey Example`) born 1980-04-10, with the shipped defaults (a day-of event
+plus 7-day and 1-day reminders).
 
 ### Birthday (🎂)
 
@@ -31,70 +34,42 @@ BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//radicale-contact-dates//EN
 BEGIN:VEVENT
-UID:auto-birthday-casey-example-2026@radicale
+UID:auto-birthday-casey-example-2026-r0@radicale
 DTSTAMP:20260531T200626Z
 DTSTART;VALUE=DATE:20260410
 DTEND;VALUE=DATE:20260411
 SUMMARY:🎂 Casey Example turns 46
+DESCRIPTION:🎂 Casey Example turns 46
 TRANSP:TRANSPARENT
 CATEGORIES:Birthday
 X-AUTO-CONTACT-DATE-SOURCE:casey-example
 BEGIN:VALARM
 ACTION:DISPLAY
+TRIGGER:PT11H30M
+DESCRIPTION:🎂 Casey Example turns 46
+END:VALARM
+BEGIN:VALARM
+ACTION:DISPLAY
 TRIGGER:-P6DT12H30M
 DESCRIPTION:🎂 Casey Example turns 46 on 10 April
 END:VALARM
 BEGIN:VALARM
 ACTION:DISPLAY
 TRIGGER:-PT12H30M
-DESCRIPTION:🎂 Casey Example turns 46 on 10 April
-END:VALARM
-BEGIN:VALARM
-ACTION:DISPLAY
-TRIGGER:PT11H30M
-DESCRIPTION:🎂 Casey Example turns 46 today
+DESCRIPTION:🎂 Casey Example turns 46 tomorrow
 END:VALARM
 END:VEVENT
 END:VCALENDAR
 ```
 
-### Anniversary (💍)
-
-```ics
-BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//radicale-contact-dates//EN
-BEGIN:VEVENT
-UID:auto-anniversary-casey-example-2026@radicale
-DTSTAMP:20260531T200626Z
-DTSTART;VALUE=DATE:20260410
-DTEND;VALUE=DATE:20260411
-SUMMARY:💍 Casey Example — 25th anniversary
-TRANSP:TRANSPARENT
-CATEGORIES:Anniversary
-X-AUTO-CONTACT-DATE-SOURCE:casey-example
-BEGIN:VALARM
-ACTION:DISPLAY
-TRIGGER:-P6DT12H30M
-DESCRIPTION:💍 Casey Example's 25th anniversary on 10 April
-END:VALARM
-BEGIN:VALARM
-ACTION:DISPLAY
-TRIGGER:-PT12H30M
-DESCRIPTION:💍 Casey Example's 25th anniversary on 10 April
-END:VALARM
-BEGIN:VALARM
-ACTION:DISPLAY
-TRIGGER:PT11H30M
-DESCRIPTION:💍 Casey Example's 25th anniversary today
-END:VALARM
-END:VEVENT
-END:VCALENDAR
-```
+The day-of event has its own 11:30 popup (`TRIGGER:PT11H30M`); the 7-day
+(`-P6DT12H30M`) and 1-day (`-PT12H30M`) reminders are `alarm`s hosted on it. The
+`anniversary` defaults are the same shape with `💍` and `{count_english}`
+(e.g. `💍 Casey Example's 25th anniversary`).
 
 A source whose **year is unknown** (e.g. Apple's `X-APPLE-OMIT-YEAR`, the `1604`
-sentinel, or vCard 4.0 `--MM-DD`) instead gets a single **perpetual** event with
-`RRULE:FREQ=YEARLY` and no count in the text.
+sentinel, or vCard 4.0 `--MM-DD`) instead gets a **perpetual** event with
+`RRULE:FREQ=YEARLY`, using each reminder's `template_unknown`.
 
 ---
 
@@ -215,70 +190,80 @@ definition supports:
 | `apple_label` | `anniversary` | Decoded `X-ABLABEL` to match (case-insensitive), e.g. `Anniversary`. |
 | `match` | `other_dates` | `x-abdate-any` claims every labeled date **not** already claimed by a more specific enabled type (first-match-wins). |
 | `category` | all | Value of the `CATEGORIES` property (Birthday / Anniversary / Important date). |
-| `alarms` | all | List of `{days_before, at}` reminders (see below). |
-| `templates` | all | Text templates for the summary and alarms (see below). |
+| `reminders` | all | What to generate — a list of reminders (see below). **At least one `type: "event"` is required.** |
 
 The catch-all `other_dates` is what surfaces custom labels (its `{label}`
 placeholder renders the decoded `X-ABLABEL`); enable it if you want events for
 dates like `Graduation`.
 
-#### `alarms`
+#### `reminders`
 
-A list of reminders, each `{"days_before": N, "at": "HH:MM"}`. `days_before: 0`
-means a reminder on the day itself; `> 0` means N days before. The default for
-every shipped type is seven days before, one day before, and on the day — all at
-11:30.
+Each `date_type` has a flat `reminders` list. Each reminder is **one** of two
+kinds, set by `type`:
 
-Each alarm may additionally set:
+- **`type: "event"`** → an all-day `VEVENT` on *(occurrence − `days_before`)*.
+  Its `SUMMARY` **and** `DESCRIPTION` are the rendered `template`, and it carries
+  its own popup `VALARM` at `at`. Shows the right text on **every** client
+  (it's a real `SUMMARY`).
+- **`type: "alarm"`** → just a `VALARM` appended to the **day-of event** (the
+  `event` reminder whose `days_before` is closest to 0); trigger from its
+  `days_before`+`at`, `DESCRIPTION` = the rendered template. No calendar entry —
+  cheaper, but clients that ignore `VALARM` `DESCRIPTION` show the host event's
+  `SUMMARY` instead.
 
-| Field | Default | Meaning |
-|---|---|---|
-| `type` | `"alarm"` | `"alarm"` → a `VALARM` on the date event (as before). `"event"` → a **separate timed reminder `VEVENT`** at the reminder moment. |
-| `duration` | `"PT1M"` | ISO 8601 length of the reminder event (`type: "event"` only). `"PT0S"` = `DTSTART == DTEND`. |
+| Field | Meaning |
+|---|---|
+| `days_before` | Days before the date (`0` = the date itself). |
+| `at` | `HH:MM` local time of the popup. |
+| `type` | `"event"` or `"alarm"`. |
+| `template` | Text (a `str.format` string) when the year is **known**. |
+| `template_unknown` | Text when the year is **unknown** (perpetual). |
 
-**Why `type: "event"`?** Many clients (e.g. Apple, Google) ignore a `VALARM`'s
-`DESCRIPTION` and show the event's `SUMMARY` in the notification instead — so the
-per-lead context (`… on 10 April` vs `… today`) is lost. A reminder *event*
-carries that text in its own `SUMMARY`, so it shows correctly everywhere. The
-date event keeps `VALARM`s only for `type: "alarm"` entries (so no double
-notification); each reminder event fires via its own `TRIGGER:PT0S` alarm. It
-uses a floating-local time (no time zone) and, for year-unknown contacts, recurs
-yearly. Files are named `auto-<type>-<uid>[-<year>]-r<i>.ics`. **Advance**
-reminders (`days_before > 0`) are pruned once their day has passed; **day-of**
-reminders (`days_before: 0`) are kept with the main event (per `past_days`).
+```json
+"reminders": [
+  {"days_before": 0, "at": "11:30", "type": "event",
+   "template": "🎂 {name} turns {count}",
+   "template_unknown": "🎂 {name}'s birthday"},
+  {"days_before": 7, "at": "11:30", "type": "alarm",
+   "template": "🎂 {name} turns {count} on {date}",
+   "template_unknown": "🎂 {name}'s birthday on {date}"},
+  {"days_before": 1, "at": "11:30", "type": "alarm",
+   "template": "🎂 {name} turns {count} tomorrow",
+   "template_unknown": "🎂 {name}'s birthday tomorrow"}
+]
+```
 
-#### `templates` and placeholders
+Behaviour:
 
-Templates are fully user-controlled; only the **placeholder keys** are fixed.
-Each template is a Python `str.format` string and may use any of:
+- **Validation:** an enabled type with no `type: "event"` reminder is an error
+  (alarms need an event to host them).
+- **Perpetual** (year unknown) → the event recurs yearly (`RRULE:FREQ=YEARLY`)
+  and uses `template_unknown`.
+- **Prune:** an `event` reminder with `days_before > 0` is dropped once its day
+  has passed; the day-of event (and its hosted alarms) stay per `past_days`.
+- One file per `event` reminder per occurrence:
+  `auto-<type>-<uid>[-<year>]-r<i>.ics` (`i` = index in `reminders`). Alarms
+  live inside their host event's file.
+
+#### Template placeholders
+
+Each `template` / `template_unknown` is a Python `str.format` string and may use:
 
 | Placeholder | Example | Notes |
 |---|---|---|
 | `{name}` | `Casey Example` | The contact's `FN`. |
-| `{count}` | `46` | Years since the base date — the age turned / Nth occurrence (empty for perpetual / unknown-year events). |
+| `{count}` | `46` | Years since the base date — the age turned / Nth occurrence (empty when the year is unknown). |
 | `{age}` | `46` | Alias of `{count}`. |
 | `{years}` | `46` | Alias of `{count}`. |
-| `{ordinal}` | `25th` | English ordinal of `{count}`. Renders English suffixes; for other languages use `{count}` + your own suffix. |
+| `{ordinal}` | `25th` | English ordinal of `{count}`. For other languages use `{count}` + your own suffix. |
 | `{count_english}` | `25th` | Explicit alias of `{ordinal}`. |
 | `{label}` | `Graduation` | The decoded date label (`X-ABLABEL`), mainly for `other_dates`. |
 | `{day}` | `10` | Day of month (numeric). |
-| `{date}` | `10 April` | Day + localized month name (from `month_names`). |
-| `{year}` | `2026` | Occurrence year (empty for perpetual events). |
+| `{date}` | `10 April` | The date itself (see `date_format`). |
+| `{year}` | `2026` | Occurrence year (empty when unknown). |
 
-Each type has six template keys. `*_with_count` is used when the base year is
-known; `*_no_count` when it is unknown (perpetual):
-
-| Template key | Default (birthday) | Used for |
-|---|---|---|
-| `summary_with_count` | `🎂 {name} turns {count}` | `SUMMARY`, year known. |
-| `summary_no_count` | `🎂 {name}'s birthday` | `SUMMARY`, year unknown. |
-| `alarm_before_with_count` | `🎂 {name} turns {count} on {date}` | Reminder before the day, year known. |
-| `alarm_before_no_count` | `🎂 {name}'s birthday on {date}` | Reminder before the day, year unknown. |
-| `alarm_day_with_count` | `🎂 {name} turns {count} today` | Reminder on the day, year known. |
-| `alarm_day_no_count` | `🎂 {name}'s birthday today` | Reminder on the day, year unknown. |
-
-The `anniversary` defaults use `{ordinal}` (`💍 {name} — {ordinal} anniversary`),
-and `other_dates` uses `{label}` (`📅 {name} — {label}`).
+Use `template_unknown` to phrase the year-unknown case differently (e.g.
+`🎂 {name}'s birthday` vs `🎂 {name} turns {count}`).
 
 #### `date_format`
 
@@ -326,16 +311,17 @@ NOTE:Work contact — no dates wanted #NB
 
 - **Idempotent reconcile.** Re-running with no contact changes writes nothing;
   the on-disk events are diffed (ignoring `DTSTAMP`) and left untouched.
-- **Dated vs perpetual.** Sources with a known year get one **dated** event per
-  occurrence in the window, each carrying its count. Sources without a year get
-  a single **perpetual** `RRULE:FREQ=YEARLY` event with no count.
+- **Dated vs perpetual.** Sources with a known year get a **dated** event per
+  occurrence in the window (using `template`). Sources without a year get a
+  **perpetual** `RRULE:FREQ=YEARLY` event (using `template_unknown`).
 - **`{count}` = years since the base date.** For a birthday it is the age turned
   (`turns 46`); for an anniversary it is the Nth (`25th anniversary`) — the same
   `occurrence_year − base_year` logic for every type.
-- **Reminder events (opt-in).** An alarm with `type: "event"` becomes a separate
-  timed `VEVENT` whose `SUMMARY` carries the reminder text, so clients that
-  ignore `VALARM` descriptions still notify correctly. Spent advance reminders
-  are pruned once their day passes; day-of reminders stay. See `alarms` above.
+- **Reminders: events vs alarms.** Each reminder is either an `event` (an
+  all-day `VEVENT` shown in the calendar — correct text on every client) or an
+  `alarm` (a `VALARM` hosted on the day-of event). At least one `event` is
+  required. Spent advance events are pruned once their day passes; the day-of
+  event stays. See [`reminders`](#reminders).
 - **Feb 29.** Leap-day dates fall back to **Feb 28** in non-leap years.
 - **Window.** Dated events exist only within `[today - past_days,
   today + future_days]`; older/newer ones are pruned as the window slides.

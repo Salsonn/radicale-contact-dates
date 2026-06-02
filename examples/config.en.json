@@ -19,56 +19,50 @@
       "enabled": true,
       "source": "BDAY",
       "category": "Birthday",
-      "alarms": [
-        {"days_before": 7, "at": "11:30"},
-        {"days_before": 1, "at": "11:30"},
-        {"days_before": 0, "at": "11:30"}
-      ],
-      "templates": {
-        "summary_with_count": "🎂 {name} turns {count}",
-        "summary_no_count": "🎂 {name}'s birthday",
-        "alarm_before_with_count": "🎂 {name} turns {count} on {date}",
-        "alarm_before_no_count": "🎂 {name}'s birthday on {date}",
-        "alarm_day_with_count": "🎂 {name} turns {count} today",
-        "alarm_day_no_count": "🎂 {name}'s birthday today"
-      }
+      "reminders": [
+        {"days_before": 0, "at": "11:30", "type": "event",
+         "template": "🎂 {name} turns {count}",
+         "template_unknown": "🎂 {name}'s birthday"},
+        {"days_before": 7, "at": "11:30", "type": "alarm",
+         "template": "🎂 {name} turns {count} on {date}",
+         "template_unknown": "🎂 {name}'s birthday on {date}"},
+        {"days_before": 1, "at": "11:30", "type": "alarm",
+         "template": "🎂 {name} turns {count} tomorrow",
+         "template_unknown": "🎂 {name}'s birthday tomorrow"}
+      ]
     },
     "anniversary": {
       "enabled": true,
       "source": "ANNIVERSARY",
       "apple_label": "Anniversary",
       "category": "Anniversary",
-      "alarms": [
-        {"days_before": 7, "at": "11:30"},
-        {"days_before": 1, "at": "11:30"},
-        {"days_before": 0, "at": "11:30"}
-      ],
-      "templates": {
-        "summary_with_count": "💍 {name} — {ordinal} anniversary",
-        "summary_no_count": "💍 {name}'s anniversary",
-        "alarm_before_with_count": "💍 {name}'s {ordinal} anniversary on {date}",
-        "alarm_before_no_count": "💍 {name}'s anniversary on {date}",
-        "alarm_day_with_count": "💍 {name}'s {ordinal} anniversary today",
-        "alarm_day_no_count": "💍 {name}'s anniversary today"
-      }
+      "reminders": [
+        {"days_before": 0, "at": "11:30", "type": "event",
+         "template": "💍 {name}'s {count_english} anniversary",
+         "template_unknown": "💍 {name}'s anniversary"},
+        {"days_before": 7, "at": "11:30", "type": "alarm",
+         "template": "💍 {name}'s {count_english} anniversary on {date}",
+         "template_unknown": "💍 {name}'s anniversary on {date}"},
+        {"days_before": 1, "at": "11:30", "type": "alarm",
+         "template": "💍 {name}'s {count_english} anniversary tomorrow",
+         "template_unknown": "💍 {name}'s anniversary tomorrow"}
+      ]
     },
     "other_dates": {
       "enabled": false,
       "match": "x-abdate-any",
       "category": "Important date",
-      "alarms": [
-        {"days_before": 7, "at": "11:30"},
-        {"days_before": 1, "at": "11:30"},
-        {"days_before": 0, "at": "11:30"}
-      ],
-      "templates": {
-        "summary_with_count": "📅 {name} — {label} ({count})",
-        "summary_no_count": "📅 {name} — {label}",
-        "alarm_before_with_count": "📅 {name} — {label} ({count}) on {date}",
-        "alarm_before_no_count": "📅 {name} — {label} on {date}",
-        "alarm_day_with_count": "📅 {name} — {label} ({count}) today",
-        "alarm_day_no_count": "📅 {name} — {label} today"
-      }
+      "reminders": [
+        {"days_before": 0, "at": "11:30", "type": "event",
+         "template": "📅 {name} — {label} ({count})",
+         "template_unknown": "📅 {name} — {label}"},
+        {"days_before": 7, "at": "11:30", "type": "alarm",
+         "template": "📅 {name} — {label} ({count}) on {date}",
+         "template_unknown": "📅 {name} — {label} on {date}"},
+        {"days_before": 1, "at": "11:30", "type": "alarm",
+         "template": "📅 {name} — {label} ({count}) tomorrow",
+         "template_unknown": "📅 {name} — {label} tomorrow"}
+      ]
     }
   }
 }

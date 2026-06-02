@@ -303,40 +303,6 @@ class TestTrigger(unittest.TestCase):
         self.assertEqual(cd.alarm_trigger(0, "00:00"), "PT0S")
 
 
-class TestParseIsoDuration(unittest.TestCase):
-    def test_minutes(self):
-        self.assertEqual(cd.parse_iso_duration("PT1M"), dt.timedelta(minutes=1))
-
-    def test_minutes_seconds(self):
-        self.assertEqual(cd.parse_iso_duration("PT1M30S"),
-                         dt.timedelta(minutes=1, seconds=30))
-
-    def test_zero(self):
-        self.assertEqual(cd.parse_iso_duration("PT0S"), dt.timedelta(0))
-
-    def test_hours(self):
-        self.assertEqual(cd.parse_iso_duration("PT2H"), dt.timedelta(hours=2))
-
-    def test_days(self):
-        self.assertEqual(cd.parse_iso_duration("P1D"), dt.timedelta(days=1))
-
-    def test_full(self):
-        self.assertEqual(cd.parse_iso_duration("P1DT2H3M4S"),
-                         dt.timedelta(days=1, hours=2, minutes=3, seconds=4))
-
-    def test_invalid_go_style_raises(self):
-        with self.assertRaises(ValueError):
-            cd.parse_iso_duration("1m30s")
-
-    def test_invalid_empty_raises(self):
-        with self.assertRaises(ValueError):
-            cd.parse_iso_duration("")
-
-    def test_invalid_bare_p_raises(self):
-        with self.assertRaises(ValueError):
-            cd.parse_iso_duration("PT")
-
-
 class TestIcs(unittest.TestCase):
     def test_escape_comma_semicolon(self):
         self.assertEqual(cd.ics_escape("a,b;c"), "a\\,b\\;c")
@@ -408,155 +374,6 @@ class TestOccurrences(unittest.TestCase):
         self.assertIn(dt.date(2026, 2, 28), [d for d, _ in occ])
 
 
-class TestBuildEvent(unittest.TestCase):
-    def setUp(self):
-        self.bd = cd.DEFAULT_CONFIG["date_types"]["birthday"]
-        self.an = cd.DEFAULT_CONFIG["date_types"]["anniversary"]
-        self.months = cd.DEFAULT_MONTHS
-
-    def test_known_birthday_uid_summary_alarms(self):
-        ev = cd.build_event_known(
-            "birthday", "u1", "Casey Example", dt.date(2027, 3, 19), 46,
-            "birthday", self.bd, self.months)
-        self.assertIn("UID:auto-birthday-u1-2027@radicale", ev)
-        self.assertIn("DTSTART;VALUE=DATE:20270319", ev)
-        self.assertIn("DTEND;VALUE=DATE:20270320", ev)
-        self.assertIn("SUMMARY:🎂 Casey Example turns 46", ev)
-        self.assertIn("X-AUTO-CONTACT-DATE-SOURCE:u1", ev)
-        self.assertIn("CATEGORIES:Birthday", ev)
-        self.assertIn("TRIGGER:-P6DT12H30M", ev)
-        self.assertIn(
-            "DESCRIPTION:🎂 Casey Example turns 46 on 19 March", ev)
-        self.assertNotIn("RRULE", ev)
-
-    def test_unknown_birthday_recurring_no_count(self):
-        ev = cd.build_event_unknown(
-            "birthday", "u2", "Casey Example", 7, 20, 2026, "birthday",
-            self.bd, self.months)
-        self.assertIn("UID:auto-birthday-u2@radicale", ev)
-        self.assertIn("RRULE:FREQ=YEARLY", ev)
-        self.assertIn("X-AUTO-CONTACT-DATE-SOURCE:u2", ev)
-        summary = [ln for ln in ev.split("\r\n")
-                   if ln.startswith("SUMMARY:")][0]
-        self.assertEqual(summary, "SUMMARY:🎂 Casey Example's birthday")
-        self.assertIn(
-            "DESCRIPTION:🎂 Casey Example's birthday on 20 July", ev)
-
-    def test_known_anniversary_ordinal_summary(self):
-        ev = cd.build_event_known(
-            "anniversary", "u1", "Casey Example", dt.date(2027, 10, 26), 25,
-            "Anniversary", self.an, self.months)
-        self.assertIn("UID:auto-anniversary-u1-2027@radicale", ev)
-        self.assertIn("SUMMARY:💍 Casey Example — 25th anniversary", ev)
-        self.assertIn("CATEGORIES:Anniversary", ev)
-        self.assertIn(
-            "DESCRIPTION:💍 Casey Example's 25th anniversary on 26 October", ev)
-
-    def test_unknown_anniversary_no_count(self):
-        ev = cd.build_event_unknown(
-            "anniversary", "u2", "Casey Example", 10, 26, 2026, "Anniversary",
-            self.an, self.months)
-        self.assertIn("UID:auto-anniversary-u2@radicale", ev)
-        self.assertIn("SUMMARY:💍 Casey Example's anniversary", ev)
-        self.assertIn("RRULE:FREQ=YEARLY", ev)
-
-    def test_day_alarm_uses_day_template(self):
-        ev = cd.build_event_known(
-            "birthday", "u3", "Test", dt.date(2027, 3, 19), 40, "birthday",
-            self.bd, self.months)
-        # day-of alarm (days_before 0) -> "turns 40 today", no "on {date}"
-        self.assertIn("TRIGGER:PT11H30M", ev)
-        self.assertIn("DESCRIPTION:🎂 Test turns 40 today", ev)
-
-    def test_other_dates_label_summary(self):
-        od = cd.DEFAULT_CONFIG["date_types"]["other_dates"]
-        ev = cd.build_event_known(
-            "other_dates", "u4", "Test", dt.date(2027, 9, 1), 12, "Graduation",
-            od, self.months)
-        self.assertIn("UID:auto-other_dates-u4-2027@radicale", ev)
-        self.assertIn("SUMMARY:📅 Test — Graduation (12)", ev)
-        self.assertIn("CATEGORIES:Important date", ev)
-
-    def test_has_dtstamp(self):
-        ev = cd.build_event_known(
-            "birthday", "u1", "X", dt.date(2027, 3, 19), 40, "birthday",
-            self.bd, self.months)
-        self.assertIn("DTSTAMP:", ev)
-        self.assertIn("TRANSP:TRANSPARENT", ev)
-
-    def test_prodid_default(self):
-        items = cd.desired_items(
-            [{"uid": "u", "fn": "X", "bday": "BDAY:1980-04-10", "note": "",
-              "categories": [], "labeled_dates": []}],
-            dt.date(2026, 5, 30), cd.DEFAULT_CONFIG)
-        self.assertIn("PRODID:-//radicale-contact-dates//EN",
-                      list(items.values())[0])
-
-
-class TestReminderEvents(unittest.TestCase):
-    def setUp(self):
-        self.bd = cd.DEFAULT_CONFIG["date_types"]["birthday"]
-        self.months = cd.DEFAULT_MONTHS
-
-    def test_known_before_reminder_is_timed_event(self):
-        alarm = {"days_before": 7, "at": "11:30", "type": "event",
-                 "duration": "PT1M"}
-        ev = cd.build_reminder_event_known(
-            "birthday", "u1", "Casey Example", dt.date(2026, 4, 10), 46,
-            "birthday", alarm, self.bd, self.months, index=0)
-        self.assertIn("DTSTART:20260403T113000", ev)   # 7 days before, 11:30
-        self.assertIn("DTEND:20260403T113100", ev)     # + PT1M
-        self.assertIn("SUMMARY:🎂 Casey Example turns 46 on 10 April", ev)
-        self.assertIn("TRIGGER:PT0S", ev)
-        self.assertIn(
-            "DESCRIPTION:🎂 Casey Example turns 46 on 10 April", ev)
-        self.assertIn("UID:auto-birthday-u1-2026-r0@radicale", ev)
-        self.assertIn("CATEGORIES:Birthday", ev)
-        self.assertIn("X-AUTO-CONTACT-DATE-SOURCE:u1", ev)
-        self.assertIn("TRANSP:TRANSPARENT", ev)
-        self.assertNotIn("RRULE", ev)
-
-    def test_known_day_of_reminder_uses_today_template(self):
-        alarm = {"days_before": 0, "at": "11:30", "type": "event",
-                 "duration": "PT0S"}
-        ev = cd.build_reminder_event_known(
-            "birthday", "u1", "Test", dt.date(2026, 4, 10), 46, "birthday",
-            alarm, self.bd, self.months, index=2)
-        self.assertIn("DTSTART:20260410T113000", ev)
-        self.assertIn("DTEND:20260410T113000", ev)     # PT0S -> equal
-        self.assertIn("SUMMARY:🎂 Test turns 46 today", ev)
-        self.assertIn("UID:auto-birthday-u1-2026-r2@radicale", ev)
-
-    def test_duration_defaults_to_one_minute(self):
-        alarm = {"days_before": 1, "at": "09:00", "type": "event"}
-        ev = cd.build_reminder_event_known(
-            "birthday", "u1", "Test", dt.date(2026, 4, 10), 46, "birthday",
-            alarm, self.bd, self.months, index=1)
-        self.assertIn("DTSTART:20260409T090000", ev)
-        self.assertIn("DTEND:20260409T090100", ev)     # default PT1M
-
-    def test_unknown_reminder_recurs_yearly_no_count(self):
-        alarm = {"days_before": 7, "at": "11:30", "type": "event",
-                 "duration": "PT1M"}
-        ev = cd.build_reminder_event_unknown(
-            "birthday", "u2", "Casey Example", 7, 20, 2026, "birthday",
-            alarm, self.bd, self.months, index=0)
-        self.assertIn("RRULE:FREQ=YEARLY", ev)
-        self.assertIn("DTSTART:20260713T113000", ev)   # 7 days before 07-20
-        self.assertIn("SUMMARY:🎂 Casey Example's birthday on 20 July", ev)
-        self.assertIn("UID:auto-birthday-u2-r0@radicale", ev)
-
-    def test_valarms_skips_event_type(self):
-        type_cfg = dict(self.bd, alarms=[
-            {"days_before": 7, "at": "11:30", "type": "event"},
-            {"days_before": 0, "at": "11:30", "type": "alarm"},
-        ])
-        lines = cd._valarms("X", 46, 4, 10, "birthday", type_cfg, self.months)
-        self.assertEqual(lines.count("BEGIN:VALARM"), 1)
-        self.assertIn("TRIGGER:PT11H30M", lines)
-        self.assertNotIn("TRIGGER:-P6DT12H30M", lines)
-
-
 # --- desired_items + reconcile + config --------------------------
 
 class TestDesired(unittest.TestCase):
@@ -581,20 +398,20 @@ class TestDesired(unittest.TestCase):
         contacts = [self._c("u2", "Casey Example", "BDAY:1971-03-19")]
         items = cd.desired_items(contacts, self.TODAY, cd.DEFAULT_CONFIG)
         self.assertEqual(sorted(items), [
-            "auto-birthday-u2-2026.ics",
-            "auto-birthday-u2-2027.ics",
-            "auto-birthday-u2-2028.ics",
+            "auto-birthday-u2-2026-r0.ics",
+            "auto-birthday-u2-2027-r0.ics",
+            "auto-birthday-u2-2028-r0.ics",
         ])
-        self.assertIn("BEGIN:VCALENDAR", items["auto-birthday-u2-2027.ics"])
+        self.assertIn("BEGIN:VCALENDAR", items["auto-birthday-u2-2027-r0.ics"])
         self.assertIn("SUMMARY:🎂 Casey Example turns 56",
-                      items["auto-birthday-u2-2027.ics"])
+                      items["auto-birthday-u2-2027-r0.ics"])
 
     def test_unknown_single_file(self):
         contacts = [self._c("u3", "Casey Example",
                             "BDAY;X-APPLE-OMIT-YEAR=1604:1604-07-20")]
         items = cd.desired_items(contacts, self.TODAY, cd.DEFAULT_CONFIG)
-        self.assertEqual(list(items), ["auto-birthday-u3.ics"])
-        self.assertIn("RRULE:FREQ=YEARLY", items["auto-birthday-u3.ics"])
+        self.assertEqual(list(items), ["auto-birthday-u3-r0.ics"])
+        self.assertIn("RRULE:FREQ=YEARLY", items["auto-birthday-u3-r0.ics"])
 
     def test_birthday_and_anniversary_in_one_set(self):
         # A contact with BDAY *and* an Apple anniversary yields BOTH a
@@ -605,12 +422,12 @@ class TestDesired(unittest.TestCase):
         items = cd.desired_items(contacts, self.TODAY, cd.DEFAULT_CONFIG)
         names = sorted(items)
         # birthday: 2026/2027/2028 (3) ; anniversary: 2026/2027/2028 (3)
-        self.assertIn("auto-birthday-u5-2026.ics", names)
-        self.assertIn("auto-anniversary-u5-2026.ics", names)
+        self.assertIn("auto-birthday-u5-2026-r0.ics", names)
+        self.assertIn("auto-anniversary-u5-2026-r0.ics", names)
         self.assertIn("SUMMARY:🎂 Casey Example turns 46",
-                      items["auto-birthday-u5-2026.ics"])
-        self.assertIn("SUMMARY:💍 Casey Example — 24th anniversary",
-                      items["auto-anniversary-u5-2026.ics"])
+                      items["auto-birthday-u5-2026-r0.ics"])
+        self.assertIn("SUMMARY:💍 Casey Example's 24th anniversary",
+                      items["auto-anniversary-u5-2026-r0.ics"])
         self.assertEqual(
             len([n for n in names if n.startswith("auto-birthday-")]), 3)
         self.assertEqual(
@@ -658,76 +475,107 @@ class TestDesired(unittest.TestCase):
             "u9", "Fin Example", None,
             labeled_dates=[{"date": "--10-26", "label": "Anniversary"}])]
         items = cd.desired_items(contacts, self.TODAY, cd.DEFAULT_CONFIG)
-        self.assertEqual(list(items), ["auto-anniversary-u9.ics"])
-        self.assertIn("RRULE:FREQ=YEARLY", items["auto-anniversary-u9.ics"])
+        self.assertEqual(list(items), ["auto-anniversary-u9-r0.ics"])
+        self.assertIn("RRULE:FREQ=YEARLY",
+                      items["auto-anniversary-u9-r0.ics"])
 
-    def test_event_alarm_emits_reminder_files(self):
-        raw = {"date_types": {"birthday": {"alarms": [
-            {"days_before": 7, "at": "11:30", "type": "event",
-             "duration": "PT1M"},
-            {"days_before": 0, "at": "11:30", "type": "alarm"},
-        ]}}}
-        cfg = cd.load_config(None, raw=raw)
-        contacts = [self._c("u", "Casey", "BDAY:1971-03-19")]
-        items = cd.desired_items(contacts, self.TODAY, cfg)
-        # 2026 occurrence (03-19) already passed: its reminder is pruned, the
-        # main event is kept (past_days); future occurrences keep reminders.
-        self.assertEqual(sorted(items), [
-            "auto-birthday-u-2026.ics",
-            "auto-birthday-u-2027-r0.ics",
-            "auto-birthday-u-2027.ics",
-            "auto-birthday-u-2028-r0.ics",
-            "auto-birthday-u-2028.ics",
-        ])
-        main = items["auto-birthday-u-2026.ics"]
-        self.assertIn("TRIGGER:PT11H30M", main)        # day-of VALARM kept
-        self.assertNotIn("TRIGGER:-P6DT12H30M", main)  # 7-day moved to event
-        rem = items["auto-birthday-u-2027-r0.ics"]
-        self.assertIn("TRIGGER:PT0S", rem)
-        self.assertIn("DTSTART:20270312T113000", rem)  # 7 days before 03-19
-        self.assertIn("SUMMARY:🎂 Casey turns 56 on 19 March", rem)
-
-    def test_past_before_reminders_pruned_dayof_kept(self):
-        raw = {"date_types": {"birthday": {"alarms": [
-            {"days_before": 7, "at": "11:30", "type": "event"},
-            {"days_before": 1, "at": "11:30", "type": "event"},
-            {"days_before": 0, "at": "11:30", "type": "event"},
-        ]}}}
-        cfg = cd.load_config(None, raw=raw)
-        contacts = [self._c("u", "Casey", "BDAY:1971-03-19")]
-        items = cd.desired_items(contacts, self.TODAY, cfg)  # 2026-05-30
-        # 2026-03-19 is past: main kept, the 7d/1d "before" reminders pruned,
-        # but the day-of (0d) reminder is kept (follows the occurrence window).
-        self.assertIn("auto-birthday-u-2026.ics", items)
-        self.assertNotIn("auto-birthday-u-2026-r0.ics", items)   # 7d before
-        self.assertNotIn("auto-birthday-u-2026-r1.ics", items)   # 1d before
-        self.assertIn("auto-birthday-u-2026-r2.ics", items)      # day-of kept
-        # future occurrence keeps all its reminders
-        self.assertIn("auto-birthday-u-2027-r0.ics", items)
-        self.assertIn("auto-birthday-u-2027-r2.ics", items)
-
-    def test_partial_reminder_prune_near_occurrence(self):
-        # occurrence 3 days out (2026-06-02): the 7d-before reminder already
-        # passed and is pruned; the 1d and day-of reminders remain.
-        raw = {"date_types": {"birthday": {"alarms": [
-            {"days_before": 7, "at": "11:30", "type": "event"},
-            {"days_before": 1, "at": "11:30", "type": "event"},
-            {"days_before": 0, "at": "11:30", "type": "event"},
-        ]}}}
-        cfg = cd.load_config(None, raw=raw)
-        contacts = [self._c("u", "Casey", "BDAY:1990-06-02")]
-        items = cd.desired_items(contacts, self.TODAY, cfg)  # 2026-05-30
-        self.assertNotIn("auto-birthday-u-2026-r0.ics", items)  # 05-26, past
-        self.assertIn("auto-birthday-u-2026-r1.ics", items)     # 06-01
-        self.assertIn("auto-birthday-u-2026-r2.ics", items)     # 06-02
-
-    def test_default_config_emits_no_reminder_events(self):
-        contacts = [self._c("u", "Casey", "BDAY:1971-03-19")]
+    def test_prodid_in_output(self):
+        contacts = [self._c("u", "X", "BDAY:1980-04-10")]
         items = cd.desired_items(contacts, self.TODAY, cd.DEFAULT_CONFIG)
+        self.assertIn("PRODID:-//radicale-contact-dates//EN",
+                      list(items.values())[0])
+
+
+class TestRemindersModel(unittest.TestCase):
+    TODAY = dt.date(2026, 5, 30)
+
+    def _c(self, uid, fn, bday, note="", labeled_dates=None):
+        return {"uid": uid, "fn": fn, "bday": bday, "categories": [],
+                "note": note, "labeled_dates": labeled_dates or []}
+
+    def _bd_cfg(self, reminders):
+        return cd.load_config(
+            None, raw={"date_types": {"birthday": {"reminders": reminders}}})
+
+    EVENT0 = {"days_before": 0, "at": "11:30", "type": "event",
+              "template": "🎂 {name} turns {count}",
+              "template_unknown": "🎂 {name}'s birthday"}
+    ALARM7 = {"days_before": 7, "at": "11:30", "type": "alarm",
+              "template": "🎂 {name} turns {count} on {date}",
+              "template_unknown": "🎂 {name}'s birthday on {date}"}
+    ALARM1 = {"days_before": 1, "at": "11:30", "type": "alarm",
+              "template": "🎂 {name} turns {count} tomorrow",
+              "template_unknown": "🎂 {name}'s birthday tomorrow"}
+
+    def test_validate_requires_event(self):
+        cfg = self._bd_cfg([self.ALARM7])
+        with self.assertRaises(ValueError):
+            cd.validate_config(cfg)
+
+    def test_validate_ok_with_event(self):
+        cd.validate_config(cd.load_config(None))  # defaults: no raise
+
+    def test_dayof_event_hosts_alarms(self):
+        cfg = self._bd_cfg([self.EVENT0, self.ALARM7, self.ALARM1])
+        items = cd.desired_items([self._c("u", "Casey", "BDAY:1980-07-20")],
+                                 self.TODAY, cfg)
+        f = items["auto-birthday-u-2026-r0.ics"]
+        self.assertIn("DTSTART;VALUE=DATE:20260720", f)
+        self.assertIn("SUMMARY:🎂 Casey turns 46", f)
+        self.assertIn("DESCRIPTION:🎂 Casey turns 46", f)
+        self.assertEqual(f.count("BEGIN:VALARM"), 3)   # own popup + 7d + 1d
+        self.assertIn("TRIGGER:PT11H30M", f)           # day-of popup
+        self.assertIn("TRIGGER:-P6DT12H30M", f)        # 7 days before
+        self.assertIn("TRIGGER:-PT12H30M", f)          # 1 day before
+        self.assertIn("DESCRIPTION:🎂 Casey turns 46 on 20 July", f)
+        self.assertIn("DESCRIPTION:🎂 Casey turns 46 tomorrow", f)
+
+    def test_advance_event_pruned_when_past_dayof_kept(self):
+        cfg = self._bd_cfg([
+            self.EVENT0,
+            {"days_before": 7, "at": "11:30", "type": "event",
+             "template": "B7 {count} {date}", "template_unknown": "B7 {date}"},
+        ])
+        items = cd.desired_items([self._c("u", "Casey", "BDAY:1971-03-19")],
+                                 self.TODAY, cfg)
+        self.assertIn("auto-birthday-u-2026-r0.ics", items)        # day-of kept
+        self.assertNotIn("auto-birthday-u-2026-r1.ics", items)     # advance gone
+        self.assertIn("auto-birthday-u-2027-r1.ics", items)        # future kept
+
+    def test_perpetual_recurs_yearly(self):
+        cfg = self._bd_cfg([self.EVENT0, self.ALARM7])
+        items = cd.desired_items(
+            [self._c("u", "Casey", "BDAY;X-APPLE-OMIT-YEAR=1604:1604-07-20")],
+            self.TODAY, cfg)
+        self.assertEqual(list(items), ["auto-birthday-u-r0.ics"])
+        f = items["auto-birthday-u-r0.ics"]
+        self.assertIn("RRULE:FREQ=YEARLY", f)
+        self.assertIn("SUMMARY:🎂 Casey's birthday", f)
+        self.assertIn("DESCRIPTION:🎂 Casey's birthday on 20 July", f)
+
+    def test_alarm_hosted_on_closest_to_zero_event(self):
+        cfg = self._bd_cfg([
+            {"days_before": 3, "at": "11:30", "type": "event",
+             "template": "E {count}", "template_unknown": "E"},
+            {"days_before": 10, "at": "09:00", "type": "alarm",
+             "template": "A {count} {date}", "template_unknown": "A {date}"},
+        ])
+        items = cd.desired_items([self._c("u", "Casey", "BDAY:1980-07-20")],
+                                 self.TODAY, cfg)
+        f = items["auto-birthday-u-2026-r0.ics"]
+        self.assertIn("DTSTART;VALUE=DATE:20260717", f)   # 3 days before 07-20
+        self.assertEqual(f.count("BEGIN:VALARM"), 2)      # own popup + alarm
+        self.assertIn("TRIGGER:-P6DT15H", f)              # 10d-before vs host
+
+    def test_default_config_birthday_filenames(self):
+        cfg = cd.load_config(None)
+        items = cd.desired_items([self._c("u", "Casey", "BDAY:1980-07-20")],
+                                 self.TODAY, cfg)
+        # one event reminder (day-of) -> one file per occurrence (2025/26/27)
         self.assertEqual(sorted(items), [
-            "auto-birthday-u-2026.ics",
-            "auto-birthday-u-2027.ics",
-            "auto-birthday-u-2028.ics",
+            "auto-birthday-u-2025-r0.ics",
+            "auto-birthday-u-2026-r0.ics",
+            "auto-birthday-u-2027-r0.ics",
         ])
 
 
@@ -799,8 +647,10 @@ class TestConfig(unittest.TestCase):
         bd = cd.load_config(None)["date_types"]["birthday"]
         self.assertEqual(bd["source"], "BDAY")
         self.assertEqual(bd["category"], "Birthday")
-        self.assertIn("summary_with_count", bd["templates"])
-        self.assertIn("summary_no_count", bd["templates"])
+        reminders = bd["reminders"]
+        self.assertTrue(any(r["type"] == "event" for r in reminders))
+        self.assertIn("template", reminders[0])
+        self.assertIn("template_unknown", reminders[0])
 
     def test_anniversary_apple_label_and_match(self):
         an = cd.load_config(None)["date_types"]["anniversary"]
@@ -815,7 +665,7 @@ class TestConfig(unittest.TestCase):
     def test_merge_override_keeps_defaults(self):
         cfg = cd.load_config(None, raw={"future_days": 999})
         self.assertEqual(cfg["future_days"], 999)
-        self.assertIn("templates", cfg["date_types"]["birthday"])
+        self.assertIn("reminders", cfg["date_types"]["birthday"])
 
 
 # --- filesystem layer (tmpdir) -----------------------------------
@@ -989,30 +839,23 @@ class TestSyncIntegration(unittest.TestCase):
             s = cd.sync(d, cfg, self.TODAY, dry_run=False)
             self.assertEqual(s["delete"], 1)
             perpetual = os.path.join(
-                self._dir(d), "auto-birthday-%s.ics" % self.OMIT_YEAR[:-4])
+                self._dir(d), "auto-birthday-%s-r0.ics" % self.OMIT_YEAR[:-4])
             self.assertFalse(os.path.exists(perpetual))
 
-    def test_event_alarms_roundtrip_idempotent(self):
+    def test_reminders_roundtrip_idempotent(self):
         with tempfile.TemporaryDirectory() as d:
             self._make_tree(d, files=(self.KNOWN,))
-            raw = {"collections": {"fs/contacts": {"enabled": True}},
-                   "date_types": {"birthday": {"alarms": [
-                       {"days_before": 7, "at": "11:30", "type": "event",
-                        "duration": "PT1M"},
-                       {"days_before": 0, "at": "11:30", "type": "alarm"}]}}}
-            cfg = cd.load_config(None, raw=raw)
+            cfg = self._cfg()  # default: day-of event hosting 7d/1d alarms
             cd.sync(d, cfg, self.TODAY, dry_run=False)
             ics = sorted(f for f in os.listdir(self._dir(d))
                          if f.endswith(".ics"))
-            # 3 occurrences -> 3 main events + the 7d reminder for the 2 future
-            # ones (the past occurrence's "before" reminder is pruned).
-            self.assertEqual(len(ics), 5)
-            self.assertTrue(any(f.endswith("-r0.ics") for f in ics))
-            blob = ""
-            for f in ics:
-                with open(os.path.join(self._dir(d), f), encoding="utf-8") as h:
-                    blob += h.read()
-            self.assertIn("TRIGGER:PT0S", blob)
+            # known birthday: 3 occurrences -> 3 event files
+            self.assertEqual(len(ics), 3)
+            with open(os.path.join(self._dir(d), ics[0]),
+                      encoding="utf-8") as h:
+                blob = h.read()
+            # own popup + 7d alarm + 1d alarm, all hosted on the day-of event
+            self.assertEqual(blob.count("BEGIN:VALARM"), 3)
             s2 = cd.sync(d, cfg, self.TODAY, dry_run=False)
             self.assertEqual(
                 (s2["create"], s2["update"], s2["delete"]), (0, 0, 0))
