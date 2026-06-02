@@ -25,6 +25,8 @@ DEFAULT_MONTHS = [
     "", "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December",
 ]
+DEFAULT_DATE_FORMAT = "{day} {month}"
+DEFAULT_REMINDER_DURATION = "PT1M"
 
 # Shared alarm schedule reused by every shipped date_type.
 _DEFAULT_ALARMS = [
@@ -200,8 +202,24 @@ def ordinal(n):
     return "%d%s" % (n, suffix)
 
 
+def format_date(month, day, year, date_format, months):
+    """Render a date via a user-controlled ``date_format`` (str.format).
+
+    Placeholders: ``{day}`` (numeric), ``{month}`` (name from ``months``),
+    ``{month_num}`` (numeric), ``{year}`` (empty when unknown), and the
+    English-only convenience ``{day_english}`` (e.g. ``10th``).
+    """
+    return date_format.format(
+        day=day,
+        day_english=ordinal(day),
+        month=months[month],
+        month_num=month,
+        year=year if year is not None else "",
+    )
+
+
 def date_formatted(month, day, months):
-    return "%d %s" % (day, months[month])
+    return format_date(month, day, None, DEFAULT_DATE_FORMAT, months)
 
 
 # --- iCal duration / alarm-trigger ---------------------------------------
@@ -236,6 +254,29 @@ def alarm_trigger(days_before, at):
     )
 
 
+_ISO_DURATION_RE = re.compile(
+    r"^(?P<sign>[+-]?)P(?:(?P<days>\d+)D)?"
+    r"(?:T(?:(?P<h>\d+)H)?(?:(?P<m>\d+)M)?(?:(?P<s>\d+)S)?)?$"
+)
+
+
+def parse_iso_duration(value):
+    """ISO 8601 duration (subset) -> timedelta; ValueError if invalid.
+
+    Supports days and time components: ``PT1M``, ``PT1M30S``, ``PT0S``,
+    ``P1DT2H3M4S``. At least one numeric component is required.
+    """
+    m = _ISO_DURATION_RE.match(value or "")
+    if not m:
+        raise ValueError("invalid ISO 8601 duration: %r" % (value,))
+    parts = (m.group("days"), m.group("h"), m.group("m"), m.group("s"))
+    if all(p is None for p in parts):
+        raise ValueError("empty ISO 8601 duration: %r" % (value,))
+    days, hours, mins, secs = (int(p) if p else 0 for p in parts)
+    delta = _dt.timedelta(days=days, hours=hours, minutes=mins, seconds=secs)
+    return -delta if m.group("sign") == "-" else delta
+
+
 # --- ICS escaping / folding ----------------------------------------------
 
 def ics_escape(value):
@@ -268,6 +309,7 @@ DEFAULT_CONFIG = {
     "past_days": 365,
     "blacklist_note_marker": "#NB",
     "month_names": DEFAULT_MONTHS,
+    "date_format": DEFAULT_DATE_FORMAT,
     "suffix": "-auto-contact-dates",
     "displayname_prefix": "Contact dates",
     "prodid": PRODID,
@@ -357,37 +399,57 @@ def render(tpl, **ctx):
     return tpl.format(**ctx)
 
 
-def _ctx(name, count, month, day, year, months, label=None):
+def _ctx(name, count, month, day, year, months, label=None,
+         date_format=DEFAULT_DATE_FORMAT):
     """Template context. ``count`` = years since the base date (turns-age /
-    Nth); aliases ``{age}``/``{years}`` share its value, ``{ordinal}`` is
-    ``ordinal(count)``. All count-derived keys are empty when ``count`` is
-    ``None`` (year unknown). ``{label}`` is the decoded date label or empty."""
+    Nth); aliases ``{age}``/``{years}`` share its value, ``{ordinal}`` (and its
+    explicit alias ``{count_english}``) is ``ordinal(count)``. All count-derived
+    keys are empty when ``count`` is ``None`` (year unknown). ``{label}`` is the
+    decoded date label or empty. ``{date}`` is built from ``date_format``."""
     cnt = count if count is not None else ""
+    eng = ordinal(count) if count is not None else ""
     return {
         "name": name,
         "count": cnt,
         "age": cnt,
         "years": cnt,
-        "ordinal": ordinal(count) if count is not None else "",
+        "ordinal": eng,
+        "count_english": eng,
         "label": label if label is not None else "",
         "day": day,
-        "date": date_formatted(month, day, months),
+        "date": format_date(month, day, year, date_format, months),
         "year": year if year is not None else "",
     }
 
 
-def _valarms(name, count, month, day, label, type_cfg, months):
+def _alarm_text(name, count, month, day, label, days_before, type_cfg,
+                months, date_format=DEFAULT_DATE_FORMAT):
+    """Render the alarm/reminder line for a given lead time.
+
+    ``days_before > 0`` -> the ``alarm_before_*`` template; otherwise the
+    ``alarm_day_*`` template. ``*_with_count`` when the year is known, else
+    ``*_no_count``."""
     tpls = type_cfg["templates"]
-    ctx = _ctx(name, count, month, day, None, months, label=label)
+    ctx = _ctx(name, count, month, day, None, months, label=label,
+               date_format=date_format)
+    if int(days_before) > 0:
+        key = ("alarm_before_with_count" if count is not None
+               else "alarm_before_no_count")
+    else:
+        key = ("alarm_day_with_count" if count is not None
+               else "alarm_day_no_count")
+    return render(tpls[key], **ctx)
+
+
+def _valarms(name, count, month, day, label, type_cfg, months,
+             date_format=DEFAULT_DATE_FORMAT):
     lines = []
     for al in type_cfg.get("alarms", []):
-        if int(al["days_before"]) > 0:
-            key = ("alarm_before_with_count" if count is not None
-                   else "alarm_before_no_count")
-        else:
-            key = ("alarm_day_with_count" if count is not None
-                   else "alarm_day_no_count")
-        desc = ics_escape(render(tpls[key], **ctx))
+        if al.get("type", "alarm") == "event":
+            continue  # rendered as a separate reminder VEVENT instead
+        desc = ics_escape(_alarm_text(name, count, month, day, label,
+                                      al["days_before"], type_cfg, months,
+                                      date_format))
         lines += [
             "BEGIN:VALARM",
             "ACTION:DISPLAY",
@@ -403,14 +465,14 @@ def _utcstamp():
 
 
 def _build_event(type_name, source_uid, uid_suffix, name, start, count, label,
-                 type_cfg, months, rrule):
+                 type_cfg, months, rrule, date_format=DEFAULT_DATE_FORMAT):
     tpls = type_cfg["templates"]
     category = type_cfg.get("category", "")
     skey = "summary_with_count" if count is not None else "summary_no_count"
     summary = ics_escape(
         render(tpls[skey],
                **_ctx(name, count, start.month, start.day, start.year, months,
-                      label=label))
+                      label=label, date_format=date_format))
     )
     end = start + _dt.timedelta(days=1)
     lines = [
@@ -429,22 +491,93 @@ def _build_event(type_name, source_uid, uid_suffix, name, start, count, label,
         "X-AUTO-CONTACT-DATE-SOURCE:" + source_uid,
     ]
     lines += _valarms(name, count, start.month, start.day, label, type_cfg,
-                      months)
+                      months, date_format)
     lines.append("END:VEVENT")
     return "\r\n".join(fold_line(x) for x in lines)
 
 
 def build_event_known(type_name, uid, name, date, count, label, type_cfg,
-                      months):
+                      months, date_format=DEFAULT_DATE_FORMAT):
     return _build_event(type_name, uid, "%s-%d" % (uid, date.year), name, date,
-                        count, label, type_cfg, months, False)
+                        count, label, type_cfg, months, False, date_format)
 
 
 def build_event_unknown(type_name, uid, name, month, day, start_year, label,
-                        type_cfg, months):
+                        type_cfg, months, date_format=DEFAULT_DATE_FORMAT):
     start = _safe_date(start_year, month, day)
     return _build_event(type_name, uid, uid, name, start, None, label,
-                        type_cfg, months, True)
+                        type_cfg, months, True, date_format)
+
+
+# --- Reminder events (alarm "type": "event") ------------------------------
+
+def _build_reminder_event(type_name, uid_suffix, name, start_dt, duration,
+                          text, category, source_uid, rrule):
+    """A timed reminder VEVENT carrying the alarm text as its ``SUMMARY``, plus
+    a single ``TRIGGER:PT0S`` VALARM so even clients that ignore alarm
+    descriptions still notify with the right text. ``start_dt`` is a floating
+    local DATE-TIME (no ``Z``/``TZID``), so no ``VTIMEZONE`` is needed."""
+    end_dt = start_dt + duration
+    esc = ics_escape(text)
+    lines = [
+        "BEGIN:VEVENT",
+        "UID:auto-%s-%s@radicale" % (type_name, uid_suffix),
+        "DTSTAMP:" + _utcstamp(),
+        "DTSTART:" + start_dt.strftime("%Y%m%dT%H%M%S"),
+        "DTEND:" + end_dt.strftime("%Y%m%dT%H%M%S"),
+    ]
+    if rrule:
+        lines.append("RRULE:FREQ=YEARLY")
+    lines += [
+        "SUMMARY:" + esc,
+        "TRANSP:TRANSPARENT",
+        "CATEGORIES:" + category,
+        "X-AUTO-CONTACT-DATE-SOURCE:" + source_uid,
+        "BEGIN:VALARM",
+        "ACTION:DISPLAY",
+        "TRIGGER:PT0S",
+        "DESCRIPTION:" + esc,
+        "END:VALARM",
+        "END:VEVENT",
+    ]
+    return "\r\n".join(fold_line(x) for x in lines)
+
+
+def _reminder_start(occ_date, days_before, at):
+    """Floating-local datetime ``days_before`` days before ``occ_date`` at
+    ``at`` (``HH:MM``)."""
+    h, m = (int(x) for x in at.split(":"))
+    rdate = occ_date - _dt.timedelta(days=int(days_before))
+    return _dt.datetime(rdate.year, rdate.month, rdate.day, h, m)
+
+
+def build_reminder_event_known(type_name, uid, name, occ_date, count, label,
+                               alarm, type_cfg, months,
+                               date_format=DEFAULT_DATE_FORMAT, index=0):
+    start_dt = _reminder_start(occ_date, alarm["days_before"], alarm["at"])
+    duration = parse_iso_duration(
+        alarm.get("duration", DEFAULT_REMINDER_DURATION))
+    text = _alarm_text(name, count, occ_date.month, occ_date.day, label,
+                       alarm["days_before"], type_cfg, months, date_format)
+    uid_suffix = "%s-%d-r%d" % (uid, occ_date.year, index)
+    return _build_reminder_event(
+        type_name, uid_suffix, name, start_dt, duration, text,
+        type_cfg.get("category", ""), uid, False)
+
+
+def build_reminder_event_unknown(type_name, uid, name, month, day, start_year,
+                                 label, alarm, type_cfg, months,
+                                 date_format=DEFAULT_DATE_FORMAT, index=0):
+    occ_date = _safe_date(start_year, month, day)
+    start_dt = _reminder_start(occ_date, alarm["days_before"], alarm["at"])
+    duration = parse_iso_duration(
+        alarm.get("duration", DEFAULT_REMINDER_DURATION))
+    text = _alarm_text(name, None, month, day, label, alarm["days_before"],
+                       type_cfg, months, date_format)
+    uid_suffix = "%s-r%d" % (uid, index)
+    return _build_reminder_event(
+        type_name, uid_suffix, name, start_dt, duration, text,
+        type_cfg.get("category", ""), uid, True)
 
 
 # --- Desired set ----------------------------------------------------------
@@ -485,6 +618,7 @@ def desired_items(contacts, today, cfg):
     past_days = cfg.get("past_days", 365)
     prodid = cfg.get("prodid", PRODID)
     months = cfg.get("month_names", DEFAULT_MONTHS)
+    date_format = cfg.get("date_format", DEFAULT_DATE_FORMAT)
     enabled = _enabled_date_types(cfg)
     out = {}
     for c in contacts:
@@ -495,6 +629,10 @@ def desired_items(contacts, today, cfg):
             continue
         name = c.get("fn") or "?"
         for type_name, type_cfg in enabled:
+            event_alarms = [
+                (i, al) for i, al in enumerate(type_cfg.get("alarms", []))
+                if al.get("type", "alarm") == "event"
+            ]
             for month, day, year, label in dates_for_type(c, type_name,
                                                           type_cfg):
                 if year is None:
@@ -503,17 +641,30 @@ def desired_items(contacts, today, cfg):
                                   else today.year + 1)
                     ev = build_event_unknown(
                         type_name, uid, name, month, day, start_year, label,
-                        type_cfg, months)
+                        type_cfg, months, date_format)
                     out["auto-%s-%s.ics" % (type_name, uid)] = _wrap(
                         ev, prodid)
+                    for i, al in event_alarms:
+                        rev = build_reminder_event_unknown(
+                            type_name, uid, name, month, day, start_year,
+                            label, al, type_cfg, months, date_format, i)
+                        fn = "auto-%s-%s-r%d.ics" % (type_name, uid, i)
+                        out[fn] = _wrap(rev, prodid)
                 else:
                     for date, count in occurrences_known(
                             today, month, day, year, future_days, past_days):
                         ev = build_event_known(
                             type_name, uid, name, date, count, label,
-                            type_cfg, months)
+                            type_cfg, months, date_format)
                         out["auto-%s-%s-%d.ics" % (
                             type_name, uid, date.year)] = _wrap(ev, prodid)
+                        for i, al in event_alarms:
+                            rev = build_reminder_event_known(
+                                type_name, uid, name, date, count, label,
+                                al, type_cfg, months, date_format, i)
+                            fn = "auto-%s-%s-%d-r%d.ics" % (
+                                type_name, uid, date.year, i)
+                            out[fn] = _wrap(rev, prodid)
     return out
 
 

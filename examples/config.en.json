@@ -6,6 +6,7 @@
     "", "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
   ],
+  "date_format": "{day} {month}",
   "suffix": "-auto-contact-dates",
   "displayname_prefix": "Contact dates",
   "prodid": "-//radicale-contact-dates//EN",

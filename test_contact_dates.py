@@ -231,6 +231,65 @@ class TestPlaceholders(unittest.TestCase):
         self.assertEqual(cd.render("{label}", **ctx), "")
 
 
+class TestDateFormat(unittest.TestCase):
+    def test_default_constant(self):
+        self.assertEqual(cd.DEFAULT_DATE_FORMAT, "{day} {month}")
+
+    def test_default_day_first(self):
+        self.assertEqual(
+            cd.format_date(4, 10, 2026, "{day} {month}", cd.DEFAULT_MONTHS),
+            "10 April")
+
+    def test_us_month_first(self):
+        self.assertEqual(
+            cd.format_date(4, 10, 2026, "{month} {day}", cd.DEFAULT_MONTHS),
+            "April 10")
+
+    def test_day_english_suffix(self):
+        self.assertEqual(
+            cd.format_date(4, 10, 2026, "{month} {day_english}",
+                           cd.DEFAULT_MONTHS),
+            "April 10th")
+
+    def test_month_num_and_year(self):
+        self.assertEqual(
+            cd.format_date(4, 10, 2026, "{month_num}/{day}/{year}",
+                           cd.DEFAULT_MONTHS),
+            "4/10/2026")
+
+    def test_year_none_renders_empty(self):
+        self.assertEqual(
+            cd.format_date(4, 10, None, "{day} {month}{year}",
+                           cd.DEFAULT_MONTHS),
+            "10 April")
+
+    def test_ctx_count_english_alias_of_ordinal(self):
+        ctx = cd._ctx("X", 25, 10, 26, 2002, cd.DEFAULT_MONTHS)
+        self.assertEqual(cd.render("{count_english}", **ctx), "25th")
+        self.assertEqual(cd.render("{ordinal}", **ctx), "25th")
+
+    def test_ctx_count_english_empty_when_unknown(self):
+        ctx = cd._ctx("X", None, 7, 20, None, cd.DEFAULT_MONTHS)
+        self.assertEqual(cd.render("{count_english}", **ctx), "")
+
+    def test_ctx_custom_date_format_drives_date(self):
+        ctx = cd._ctx("X", 25, 10, 26, 2002, cd.DEFAULT_MONTHS,
+                      date_format="{month} {day_english}")
+        self.assertEqual(cd.render("{date}", **ctx), "October 26th")
+
+    def test_config_default_date_format(self):
+        self.assertEqual(cd.load_config(None)["date_format"], "{day} {month}")
+
+    def test_desired_items_threads_date_format(self):
+        cfg = cd.load_config(None, raw={"date_format": "{month} {day_english}"})
+        contacts = [{"uid": "u", "fn": "Casey", "bday": "BDAY:1980-04-10",
+                     "note": "", "categories": [], "labeled_dates": []}]
+        items = cd.desired_items(contacts, dt.date(2026, 5, 30), cfg)
+        blob = "".join(items.values())
+        self.assertIn("on April 10th", blob)
+        self.assertNotIn("on 10 April", blob)
+
+
 class TestTrigger(unittest.TestCase):
     def test_table(self):
         self.assertEqual(cd.alarm_trigger(7, "11:30"), "-P6DT12H30M")
@@ -242,6 +301,40 @@ class TestTrigger(unittest.TestCase):
 
     def test_zero(self):
         self.assertEqual(cd.alarm_trigger(0, "00:00"), "PT0S")
+
+
+class TestParseIsoDuration(unittest.TestCase):
+    def test_minutes(self):
+        self.assertEqual(cd.parse_iso_duration("PT1M"), dt.timedelta(minutes=1))
+
+    def test_minutes_seconds(self):
+        self.assertEqual(cd.parse_iso_duration("PT1M30S"),
+                         dt.timedelta(minutes=1, seconds=30))
+
+    def test_zero(self):
+        self.assertEqual(cd.parse_iso_duration("PT0S"), dt.timedelta(0))
+
+    def test_hours(self):
+        self.assertEqual(cd.parse_iso_duration("PT2H"), dt.timedelta(hours=2))
+
+    def test_days(self):
+        self.assertEqual(cd.parse_iso_duration("P1D"), dt.timedelta(days=1))
+
+    def test_full(self):
+        self.assertEqual(cd.parse_iso_duration("P1DT2H3M4S"),
+                         dt.timedelta(days=1, hours=2, minutes=3, seconds=4))
+
+    def test_invalid_go_style_raises(self):
+        with self.assertRaises(ValueError):
+            cd.parse_iso_duration("1m30s")
+
+    def test_invalid_empty_raises(self):
+        with self.assertRaises(ValueError):
+            cd.parse_iso_duration("")
+
+    def test_invalid_bare_p_raises(self):
+        with self.assertRaises(ValueError):
+            cd.parse_iso_duration("PT")
 
 
 class TestIcs(unittest.TestCase):
@@ -400,6 +493,70 @@ class TestBuildEvent(unittest.TestCase):
                       list(items.values())[0])
 
 
+class TestReminderEvents(unittest.TestCase):
+    def setUp(self):
+        self.bd = cd.DEFAULT_CONFIG["date_types"]["birthday"]
+        self.months = cd.DEFAULT_MONTHS
+
+    def test_known_before_reminder_is_timed_event(self):
+        alarm = {"days_before": 7, "at": "11:30", "type": "event",
+                 "duration": "PT1M"}
+        ev = cd.build_reminder_event_known(
+            "birthday", "u1", "Casey Example", dt.date(2026, 4, 10), 46,
+            "birthday", alarm, self.bd, self.months, index=0)
+        self.assertIn("DTSTART:20260403T113000", ev)   # 7 days before, 11:30
+        self.assertIn("DTEND:20260403T113100", ev)     # + PT1M
+        self.assertIn("SUMMARY:🎂 Casey Example turns 46 on 10 April", ev)
+        self.assertIn("TRIGGER:PT0S", ev)
+        self.assertIn(
+            "DESCRIPTION:🎂 Casey Example turns 46 on 10 April", ev)
+        self.assertIn("UID:auto-birthday-u1-2026-r0@radicale", ev)
+        self.assertIn("CATEGORIES:Birthday", ev)
+        self.assertIn("X-AUTO-CONTACT-DATE-SOURCE:u1", ev)
+        self.assertIn("TRANSP:TRANSPARENT", ev)
+        self.assertNotIn("RRULE", ev)
+
+    def test_known_day_of_reminder_uses_today_template(self):
+        alarm = {"days_before": 0, "at": "11:30", "type": "event",
+                 "duration": "PT0S"}
+        ev = cd.build_reminder_event_known(
+            "birthday", "u1", "Test", dt.date(2026, 4, 10), 46, "birthday",
+            alarm, self.bd, self.months, index=2)
+        self.assertIn("DTSTART:20260410T113000", ev)
+        self.assertIn("DTEND:20260410T113000", ev)     # PT0S -> equal
+        self.assertIn("SUMMARY:🎂 Test turns 46 today", ev)
+        self.assertIn("UID:auto-birthday-u1-2026-r2@radicale", ev)
+
+    def test_duration_defaults_to_one_minute(self):
+        alarm = {"days_before": 1, "at": "09:00", "type": "event"}
+        ev = cd.build_reminder_event_known(
+            "birthday", "u1", "Test", dt.date(2026, 4, 10), 46, "birthday",
+            alarm, self.bd, self.months, index=1)
+        self.assertIn("DTSTART:20260409T090000", ev)
+        self.assertIn("DTEND:20260409T090100", ev)     # default PT1M
+
+    def test_unknown_reminder_recurs_yearly_no_count(self):
+        alarm = {"days_before": 7, "at": "11:30", "type": "event",
+                 "duration": "PT1M"}
+        ev = cd.build_reminder_event_unknown(
+            "birthday", "u2", "Casey Example", 7, 20, 2026, "birthday",
+            alarm, self.bd, self.months, index=0)
+        self.assertIn("RRULE:FREQ=YEARLY", ev)
+        self.assertIn("DTSTART:20260713T113000", ev)   # 7 days before 07-20
+        self.assertIn("SUMMARY:🎂 Casey Example's birthday on 20 July", ev)
+        self.assertIn("UID:auto-birthday-u2-r0@radicale", ev)
+
+    def test_valarms_skips_event_type(self):
+        type_cfg = dict(self.bd, alarms=[
+            {"days_before": 7, "at": "11:30", "type": "event"},
+            {"days_before": 0, "at": "11:30", "type": "alarm"},
+        ])
+        lines = cd._valarms("X", 46, 4, 10, "birthday", type_cfg, self.months)
+        self.assertEqual(lines.count("BEGIN:VALARM"), 1)
+        self.assertIn("TRIGGER:PT11H30M", lines)
+        self.assertNotIn("TRIGGER:-P6DT12H30M", lines)
+
+
 # --- desired_items + reconcile + config --------------------------
 
 class TestDesired(unittest.TestCase):
@@ -503,6 +660,40 @@ class TestDesired(unittest.TestCase):
         items = cd.desired_items(contacts, self.TODAY, cd.DEFAULT_CONFIG)
         self.assertEqual(list(items), ["auto-anniversary-u9.ics"])
         self.assertIn("RRULE:FREQ=YEARLY", items["auto-anniversary-u9.ics"])
+
+    def test_event_alarm_emits_reminder_files(self):
+        raw = {"date_types": {"birthday": {"alarms": [
+            {"days_before": 7, "at": "11:30", "type": "event",
+             "duration": "PT1M"},
+            {"days_before": 0, "at": "11:30", "type": "alarm"},
+        ]}}}
+        cfg = cd.load_config(None, raw=raw)
+        contacts = [self._c("u", "Casey", "BDAY:1971-03-19")]
+        items = cd.desired_items(contacts, self.TODAY, cfg)
+        self.assertEqual(sorted(items), [
+            "auto-birthday-u-2026-r0.ics",
+            "auto-birthday-u-2026.ics",
+            "auto-birthday-u-2027-r0.ics",
+            "auto-birthday-u-2027.ics",
+            "auto-birthday-u-2028-r0.ics",
+            "auto-birthday-u-2028.ics",
+        ])
+        main = items["auto-birthday-u-2026.ics"]
+        self.assertIn("TRIGGER:PT11H30M", main)        # day-of VALARM kept
+        self.assertNotIn("TRIGGER:-P6DT12H30M", main)  # 7-day moved to event
+        rem = items["auto-birthday-u-2026-r0.ics"]
+        self.assertIn("TRIGGER:PT0S", rem)
+        self.assertIn("DTSTART:20260312T113000", rem)  # 7 days before 03-19
+        self.assertIn("SUMMARY:🎂 Casey turns 55 on 19 March", rem)
+
+    def test_default_config_emits_no_reminder_events(self):
+        contacts = [self._c("u", "Casey", "BDAY:1971-03-19")]
+        items = cd.desired_items(contacts, self.TODAY, cd.DEFAULT_CONFIG)
+        self.assertEqual(sorted(items), [
+            "auto-birthday-u-2026.ics",
+            "auto-birthday-u-2027.ics",
+            "auto-birthday-u-2028.ics",
+        ])
 
 
 class TestReconcile(unittest.TestCase):
@@ -765,6 +956,30 @@ class TestSyncIntegration(unittest.TestCase):
             perpetual = os.path.join(
                 self._dir(d), "auto-birthday-%s.ics" % self.OMIT_YEAR[:-4])
             self.assertFalse(os.path.exists(perpetual))
+
+    def test_event_alarms_roundtrip_idempotent(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._make_tree(d, files=(self.KNOWN,))
+            raw = {"collections": {"fs/contacts": {"enabled": True}},
+                   "date_types": {"birthday": {"alarms": [
+                       {"days_before": 7, "at": "11:30", "type": "event",
+                        "duration": "PT1M"},
+                       {"days_before": 0, "at": "11:30", "type": "alarm"}]}}}
+            cfg = cd.load_config(None, raw=raw)
+            cd.sync(d, cfg, self.TODAY, dry_run=False)
+            ics = sorted(f for f in os.listdir(self._dir(d))
+                         if f.endswith(".ics"))
+            # known birthday: 3 occurrences -> 3 main + 3 reminder events
+            self.assertEqual(len(ics), 6)
+            self.assertTrue(any(f.endswith("-r0.ics") for f in ics))
+            blob = ""
+            for f in ics:
+                with open(os.path.join(self._dir(d), f), encoding="utf-8") as h:
+                    blob += h.read()
+            self.assertIn("TRIGGER:PT0S", blob)
+            s2 = cd.sync(d, cfg, self.TODAY, dry_run=False)
+            self.assertEqual(
+                (s2["create"], s2["update"], s2["delete"]), (0, 0, 0))
 
     def test_main_dry_run_smoke(self):
         with tempfile.TemporaryDirectory() as d:

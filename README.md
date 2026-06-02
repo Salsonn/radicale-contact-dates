@@ -195,6 +195,7 @@ the keys you set. Two ready-to-edit examples are provided:
 | `past_days` | `365` | How far back (days) to keep dated events. |
 | `blacklist_note_marker` | `#NB` | Marker token; a contact whose `NOTE` contains it is skipped. |
 | `month_names` | English 1..12 | 12-entry list (index 0 is `""`) used by the `{date}` placeholder. |
+| `date_format` | `{day} {month}` | `str.format` template that builds the `{date}` placeholder — controls **order** (see below). |
 | `suffix` | `-auto-contact-dates` | Appended to each addressbook name to form the single combined calendar. |
 | `displayname_prefix` | `Contact dates` | Prefix for the generated calendar's display name, e.g. `Contact dates (Alice)`. |
 | `prodid` | `-//radicale-contact-dates//EN` | `PRODID` written into each VCALENDAR. |
@@ -228,6 +229,22 @@ means a reminder on the day itself; `> 0` means N days before. The default for
 every shipped type is seven days before, one day before, and on the day — all at
 11:30.
 
+Each alarm may additionally set:
+
+| Field | Default | Meaning |
+|---|---|---|
+| `type` | `"alarm"` | `"alarm"` → a `VALARM` on the date event (as before). `"event"` → a **separate timed reminder `VEVENT`** at the reminder moment. |
+| `duration` | `"PT1M"` | ISO 8601 length of the reminder event (`type: "event"` only). `"PT0S"` = `DTSTART == DTEND`. |
+
+**Why `type: "event"`?** Many clients (e.g. Apple, Google) ignore a `VALARM`'s
+`DESCRIPTION` and show the event's `SUMMARY` in the notification instead — so the
+per-lead context (`… on 10 April` vs `… today`) is lost. A reminder *event*
+carries that text in its own `SUMMARY`, so it shows correctly everywhere. The
+date event keeps `VALARM`s only for `type: "alarm"` entries (so no double
+notification); each reminder event fires via its own `TRIGGER:PT0S` alarm. It
+uses a floating-local time (no time zone) and, for year-unknown contacts, recurs
+yearly. Files are named `auto-<type>-<uid>[-<year>]-r<i>.ics`.
+
 #### `templates` and placeholders
 
 Templates are fully user-controlled; only the **placeholder keys** are fixed.
@@ -240,6 +257,7 @@ Each template is a Python `str.format` string and may use any of:
 | `{age}` | `46` | Alias of `{count}`. |
 | `{years}` | `46` | Alias of `{count}`. |
 | `{ordinal}` | `25th` | English ordinal of `{count}`. Renders English suffixes; for other languages use `{count}` + your own suffix. |
+| `{count_english}` | `25th` | Explicit alias of `{ordinal}`. |
 | `{label}` | `Graduation` | The decoded date label (`X-ABLABEL`), mainly for `other_dates`. |
 | `{day}` | `10` | Day of month (numeric). |
 | `{date}` | `10 April` | Day + localized month name (from `month_names`). |
@@ -259,6 +277,24 @@ known; `*_no_count` when it is unknown (perpetual):
 
 The `anniversary` defaults use `{ordinal}` (`💍 {name} — {ordinal} anniversary`),
 and `other_dates` uses `{label}` (`📅 {name} — {label}`).
+
+#### `date_format`
+
+The `{date}` placeholder is assembled from the global `date_format` (a
+`str.format` string, default `"{day} {month}"`). This controls the **order**,
+which `month_names` alone cannot. Placeholders available inside `date_format`:
+
+| Placeholder | Example | Notes |
+|---|---|---|
+| `{day}` | `10` | Day of month (numeric). |
+| `{month}` | `April` | Month name from `month_names`. |
+| `{month_num}` | `4` | Month (numeric). |
+| `{year}` | `2026` | Occurrence year (empty for perpetual events). |
+| `{day_english}` | `10th` | Day with an **English** ordinal suffix — a convenience, not localized. |
+
+Examples: `"{day} {month}"` → `10 April` (default, NL/UK); `"{month} {day}"` →
+`April 10` (US); `"{month} {day_english}"` → `April 10th`; `"{day}. {month}"` →
+`10. April` (DE).
 
 #### `collections`
 
@@ -294,6 +330,9 @@ NOTE:Work contact — no dates wanted #NB
 - **`{count}` = years since the base date.** For a birthday it is the age turned
   (`turns 46`); for an anniversary it is the Nth (`25th anniversary`) — the same
   `occurrence_year − base_year` logic for every type.
+- **Reminder events (opt-in).** An alarm with `type: "event"` becomes a separate
+  timed `VEVENT` whose `SUMMARY` carries the reminder text, so clients that
+  ignore `VALARM` descriptions still notify correctly. See `alarms` above.
 - **Feb 29.** Leap-day dates fall back to **Feb 28** in non-leap years.
 - **Window.** Dated events exist only within `[today - past_days,
   today + future_days]`; older/newer ones are pruned as the window slides.
