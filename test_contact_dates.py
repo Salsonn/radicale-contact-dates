@@ -670,8 +670,9 @@ class TestDesired(unittest.TestCase):
         cfg = cd.load_config(None, raw=raw)
         contacts = [self._c("u", "Casey", "BDAY:1971-03-19")]
         items = cd.desired_items(contacts, self.TODAY, cfg)
+        # 2026 occurrence (03-19) already passed: its reminder is pruned, the
+        # main event is kept (past_days); future occurrences keep reminders.
         self.assertEqual(sorted(items), [
-            "auto-birthday-u-2026-r0.ics",
             "auto-birthday-u-2026.ics",
             "auto-birthday-u-2027-r0.ics",
             "auto-birthday-u-2027.ics",
@@ -681,10 +682,44 @@ class TestDesired(unittest.TestCase):
         main = items["auto-birthday-u-2026.ics"]
         self.assertIn("TRIGGER:PT11H30M", main)        # day-of VALARM kept
         self.assertNotIn("TRIGGER:-P6DT12H30M", main)  # 7-day moved to event
-        rem = items["auto-birthday-u-2026-r0.ics"]
+        rem = items["auto-birthday-u-2027-r0.ics"]
         self.assertIn("TRIGGER:PT0S", rem)
-        self.assertIn("DTSTART:20260312T113000", rem)  # 7 days before 03-19
-        self.assertIn("SUMMARY:🎂 Casey turns 55 on 19 March", rem)
+        self.assertIn("DTSTART:20270312T113000", rem)  # 7 days before 03-19
+        self.assertIn("SUMMARY:🎂 Casey turns 56 on 19 March", rem)
+
+    def test_past_before_reminders_pruned_dayof_kept(self):
+        raw = {"date_types": {"birthday": {"alarms": [
+            {"days_before": 7, "at": "11:30", "type": "event"},
+            {"days_before": 1, "at": "11:30", "type": "event"},
+            {"days_before": 0, "at": "11:30", "type": "event"},
+        ]}}}
+        cfg = cd.load_config(None, raw=raw)
+        contacts = [self._c("u", "Casey", "BDAY:1971-03-19")]
+        items = cd.desired_items(contacts, self.TODAY, cfg)  # 2026-05-30
+        # 2026-03-19 is past: main kept, the 7d/1d "before" reminders pruned,
+        # but the day-of (0d) reminder is kept (follows the occurrence window).
+        self.assertIn("auto-birthday-u-2026.ics", items)
+        self.assertNotIn("auto-birthday-u-2026-r0.ics", items)   # 7d before
+        self.assertNotIn("auto-birthday-u-2026-r1.ics", items)   # 1d before
+        self.assertIn("auto-birthday-u-2026-r2.ics", items)      # day-of kept
+        # future occurrence keeps all its reminders
+        self.assertIn("auto-birthday-u-2027-r0.ics", items)
+        self.assertIn("auto-birthday-u-2027-r2.ics", items)
+
+    def test_partial_reminder_prune_near_occurrence(self):
+        # occurrence 3 days out (2026-06-02): the 7d-before reminder already
+        # passed and is pruned; the 1d and day-of reminders remain.
+        raw = {"date_types": {"birthday": {"alarms": [
+            {"days_before": 7, "at": "11:30", "type": "event"},
+            {"days_before": 1, "at": "11:30", "type": "event"},
+            {"days_before": 0, "at": "11:30", "type": "event"},
+        ]}}}
+        cfg = cd.load_config(None, raw=raw)
+        contacts = [self._c("u", "Casey", "BDAY:1990-06-02")]
+        items = cd.desired_items(contacts, self.TODAY, cfg)  # 2026-05-30
+        self.assertNotIn("auto-birthday-u-2026-r0.ics", items)  # 05-26, past
+        self.assertIn("auto-birthday-u-2026-r1.ics", items)     # 06-01
+        self.assertIn("auto-birthday-u-2026-r2.ics", items)     # 06-02
 
     def test_default_config_emits_no_reminder_events(self):
         contacts = [self._c("u", "Casey", "BDAY:1971-03-19")]
@@ -969,8 +1004,9 @@ class TestSyncIntegration(unittest.TestCase):
             cd.sync(d, cfg, self.TODAY, dry_run=False)
             ics = sorted(f for f in os.listdir(self._dir(d))
                          if f.endswith(".ics"))
-            # known birthday: 3 occurrences -> 3 main + 3 reminder events
-            self.assertEqual(len(ics), 6)
+            # 3 occurrences -> 3 main events + the 7d reminder for the 2 future
+            # ones (the past occurrence's "before" reminder is pruned).
+            self.assertEqual(len(ics), 5)
             self.assertTrue(any(f.endswith("-r0.ics") for f in ics))
             blob = ""
             for f in ics:

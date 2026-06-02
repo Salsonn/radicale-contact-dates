@@ -243,7 +243,9 @@ carries that text in its own `SUMMARY`, so it shows correctly everywhere. The
 date event keeps `VALARM`s only for `type: "alarm"` entries (so no double
 notification); each reminder event fires via its own `TRIGGER:PT0S` alarm. It
 uses a floating-local time (no time zone) and, for year-unknown contacts, recurs
-yearly. Files are named `auto-<type>-<uid>[-<year>]-r<i>.ics`.
+yearly. Files are named `auto-<type>-<uid>[-<year>]-r<i>.ics`. **Advance**
+reminders (`days_before > 0`) are pruned once their day has passed; **day-of**
+reminders (`days_before: 0`) are kept with the main event (per `past_days`).
 
 #### `templates` and placeholders
 
@@ -332,7 +334,8 @@ NOTE:Work contact — no dates wanted #NB
   `occurrence_year − base_year` logic for every type.
 - **Reminder events (opt-in).** An alarm with `type: "event"` becomes a separate
   timed `VEVENT` whose `SUMMARY` carries the reminder text, so clients that
-  ignore `VALARM` descriptions still notify correctly. See `alarms` above.
+  ignore `VALARM` descriptions still notify correctly. Spent advance reminders
+  are pruned once their day passes; day-of reminders stay. See `alarms` above.
 - **Feb 29.** Leap-day dates fall back to **Feb 28** in non-leap years.
 - **Window.** Dated events exist only within `[today - past_days,
   today + future_days]`; older/newer ones are pruned as the window slides.

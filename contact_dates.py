@@ -659,6 +659,13 @@ def desired_items(contacts, today, cfg):
                         out["auto-%s-%s-%d.ics" % (
                             type_name, uid, date.year)] = _wrap(ev, prodid)
                         for i, al in event_alarms:
+                            days_before = int(al["days_before"])
+                            rdate = date - _dt.timedelta(days=days_before)
+                            # Prune spent "before" reminders once their day has
+                            # passed; keep day-of (0d) reminders (they follow
+                            # the occurrence window, like the main event).
+                            if days_before > 0 and rdate < today:
+                                continue
                             rev = build_reminder_event_known(
                                 type_name, uid, name, date, count, label,
                                 al, type_cfg, months, date_format, i)
