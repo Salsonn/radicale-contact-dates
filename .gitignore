@@ -8,3 +8,4 @@ __pycache__/
 
 # Internal planning/scaffolding — not part of the public release.
 docs/plans/
+.agent-session-logs
