@@ -19,23 +19,19 @@ emoji in the title (🎂 / 💍 / 📅).
 
 ## What it does
 
-For every contact, each enabled **date type** emits, per occurrence, an all-day
-VEVENT for the date itself (its `SUMMARY` **and** `DESCRIPTION` hold the text)
-that hosts a few reminder `VALARM`s. Each reminder is configured as either an
-`alarm` (a `VALARM` on this event) or its own `event` — see
-[`reminders`](#reminders). Below is a real generated birthday for a contact
-(`Casey Example`) born 1980-04-10, with the shipped defaults (a day-of event
-plus 7-day and 1-day reminders).
+For every contact, each enabled **date type** emits, per occurrence, **one
+all-day VEVENT per reminder** — the date itself plus "look-ahead" events on the
+days before. Each event's `SUMMARY` (and `DESCRIPTION`) holds its own text and it
+carries a popup `VALARM` at its time, so the right text shows on **every** client
+— including Android/Apple, which ignore `VALARM` `DESCRIPTION` and only display
+the event `SUMMARY`. Below are two of the three default events for `Casey
+Example` (born 1980-04-10): the day-of and the 7-day look-ahead.
 
-### Birthday (🎂)
+### Birthday (🎂) — day-of, on 10 April
 
 ```ics
-BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//radicale-contact-dates//EN
 BEGIN:VEVENT
 UID:auto-birthday-casey-example-2026-r0@radicale
-DTSTAMP:20260531T200626Z
 DTSTART;VALUE=DATE:20260410
 DTEND;VALUE=DATE:20260411
 SUMMARY:🎂 Casey Example turns 46
@@ -48,27 +44,35 @@ ACTION:DISPLAY
 TRIGGER:PT11H30M
 DESCRIPTION:🎂 Casey Example turns 46
 END:VALARM
-BEGIN:VALARM
-ACTION:DISPLAY
-TRIGGER:-P6DT12H30M
-DESCRIPTION:🎂 Casey Example turns 46 on 10 April
-END:VALARM
-BEGIN:VALARM
-ACTION:DISPLAY
-TRIGGER:-PT12H30M
-DESCRIPTION:🎂 Casey Example turns 46 tomorrow
-END:VALARM
 END:VEVENT
-END:VCALENDAR
 ```
 
-The day-of event has its own 11:30 popup (`TRIGGER:PT11H30M`); the 7-day
-(`-P6DT12H30M`) and 1-day (`-PT12H30M`) reminders are `alarm`s hosted on it. The
-`anniversary` defaults are the same shape with `💍` and `{count_english}`
-(e.g. `💍 Casey Example's 25th anniversary`).
+### Birthday (🎂) — 7-day look-ahead, on 3 April
+
+```ics
+BEGIN:VEVENT
+UID:auto-birthday-casey-example-2026-r1@radicale
+DTSTART;VALUE=DATE:20260403
+DTEND;VALUE=DATE:20260404
+SUMMARY:🎂 Casey Example turns 46 on 10 April
+DESCRIPTION:🎂 Casey Example turns 46 on 10 April
+TRANSP:TRANSPARENT
+CATEGORIES:Birthday
+X-AUTO-CONTACT-DATE-SOURCE:casey-example
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER:PT11H30M
+DESCRIPTION:🎂 Casey Example turns 46 on 10 April
+END:VALARM
+END:VEVENT
+```
+
+(A 1-day look-ahead on 9 April — "🎂 Casey Example turns 46 tomorrow" — is
+generated too. The `anniversary` defaults are the same shape with `💍` and
+`{count_english}`, e.g. `💍 Casey Example's 25th anniversary`.)
 
 A source whose **year is unknown** (e.g. Apple's `X-APPLE-OMIT-YEAR`, the `1604`
-sentinel, or vCard 4.0 `--MM-DD`) instead gets a **perpetual** event with
+sentinel, or vCard 4.0 `--MM-DD`) instead gets **perpetual** events with
 `RRULE:FREQ=YEARLY`, using each reminder's `template_unknown`.
 
 ---
@@ -224,14 +228,19 @@ kinds, set by `type`:
   {"days_before": 0, "at": "11:30", "type": "event",
    "template": "🎂 {name} turns {count}",
    "template_unknown": "🎂 {name}'s birthday"},
-  {"days_before": 7, "at": "11:30", "type": "alarm",
+  {"days_before": 7, "at": "11:30", "type": "event",
    "template": "🎂 {name} turns {count} on {date}",
    "template_unknown": "🎂 {name}'s birthday on {date}"},
-  {"days_before": 1, "at": "11:30", "type": "alarm",
+  {"days_before": 1, "at": "11:30", "type": "event",
    "template": "🎂 {name} turns {count} tomorrow",
    "template_unknown": "🎂 {name}'s birthday tomorrow"}
 ]
 ```
+
+The shipped defaults use `type: "event"` for **all** reminders, so the text is
+correct on every client (notably Android/Apple, which ignore `VALARM`
+`DESCRIPTION`). Switch a reminder to `type: "alarm"` only if you want a cheap
+popup and accept that those clients show the host event's title instead.
 
 Behaviour:
 

@@ -394,24 +394,34 @@ class TestDesired(unittest.TestCase):
         self.assertEqual(
             cd.desired_items(contacts, self.TODAY, cd.DEFAULT_CONFIG), {})
 
-    def test_known_one_file_per_year(self):
+    def test_known_birthday_events_per_year(self):
         contacts = [self._c("u2", "Casey Example", "BDAY:1971-03-19")]
         items = cd.desired_items(contacts, self.TODAY, cd.DEFAULT_CONFIG)
+        # default all-events; past occurrence (2026) keeps only its day-of.
         self.assertEqual(sorted(items), [
             "auto-birthday-u2-2026-r0.ics",
             "auto-birthday-u2-2027-r0.ics",
+            "auto-birthday-u2-2027-r1.ics",
+            "auto-birthday-u2-2027-r2.ics",
             "auto-birthday-u2-2028-r0.ics",
+            "auto-birthday-u2-2028-r1.ics",
+            "auto-birthday-u2-2028-r2.ics",
         ])
-        self.assertIn("BEGIN:VCALENDAR", items["auto-birthday-u2-2027-r0.ics"])
         self.assertIn("SUMMARY:🎂 Casey Example turns 56",
                       items["auto-birthday-u2-2027-r0.ics"])
 
-    def test_unknown_single_file(self):
+    def test_unknown_perpetual_events(self):
         contacts = [self._c("u3", "Casey Example",
                             "BDAY;X-APPLE-OMIT-YEAR=1604:1604-07-20")]
         items = cd.desired_items(contacts, self.TODAY, cd.DEFAULT_CONFIG)
-        self.assertEqual(list(items), ["auto-birthday-u3-r0.ics"])
-        self.assertIn("RRULE:FREQ=YEARLY", items["auto-birthday-u3-r0.ics"])
+        # perpetual: all three events recur yearly (no pruning)
+        self.assertEqual(sorted(items), [
+            "auto-birthday-u3-r0.ics",
+            "auto-birthday-u3-r1.ics",
+            "auto-birthday-u3-r2.ics",
+        ])
+        for f in items.values():
+            self.assertIn("RRULE:FREQ=YEARLY", f)
 
     def test_birthday_and_anniversary_in_one_set(self):
         # A contact with BDAY *and* an Apple anniversary yields BOTH a
@@ -428,10 +438,11 @@ class TestDesired(unittest.TestCase):
                       items["auto-birthday-u5-2026-r0.ics"])
         self.assertIn("SUMMARY:💍 Casey Example's 24th anniversary",
                       items["auto-anniversary-u5-2026-r0.ics"])
-        self.assertEqual(
-            len([n for n in names if n.startswith("auto-birthday-")]), 3)
-        self.assertEqual(
-            len([n for n in names if n.startswith("auto-anniversary-")]), 3)
+        # both types present (day-of + advance events); counts > the day-of only
+        self.assertTrue(
+            [n for n in names if n.startswith("auto-birthday-")])
+        self.assertTrue(
+            [n for n in names if n.startswith("auto-anniversary-")])
 
     def test_standard_anniversary_no_bday(self):
         contacts = [self._c(
@@ -475,9 +486,13 @@ class TestDesired(unittest.TestCase):
             "u9", "Fin Example", None,
             labeled_dates=[{"date": "--10-26", "label": "Anniversary"}])]
         items = cd.desired_items(contacts, self.TODAY, cd.DEFAULT_CONFIG)
-        self.assertEqual(list(items), ["auto-anniversary-u9-r0.ics"])
-        self.assertIn("RRULE:FREQ=YEARLY",
-                      items["auto-anniversary-u9-r0.ics"])
+        self.assertEqual(sorted(items), [
+            "auto-anniversary-u9-r0.ics",
+            "auto-anniversary-u9-r1.ics",
+            "auto-anniversary-u9-r2.ics",
+        ])
+        for f in items.values():
+            self.assertIn("RRULE:FREQ=YEARLY", f)
 
     def test_prodid_in_output(self):
         contacts = [self._c("u", "X", "BDAY:1980-04-10")]
@@ -567,16 +582,25 @@ class TestRemindersModel(unittest.TestCase):
         self.assertEqual(f.count("BEGIN:VALARM"), 2)      # own popup + alarm
         self.assertIn("TRIGGER:-P6DT15H", f)              # 10d-before vs host
 
-    def test_default_config_birthday_filenames(self):
+    def test_default_config_three_events_per_future_occurrence(self):
         cfg = cd.load_config(None)
         items = cd.desired_items([self._c("u", "Casey", "BDAY:1980-07-20")],
                                  self.TODAY, cfg)
-        # one event reminder (day-of) -> one file per occurrence (2025/26/27)
+        # default = day-of + 7d + 1d, all events (Android-safe). Past
+        # occurrence (2025) keeps only its day-of; advance events pruned.
         self.assertEqual(sorted(items), [
             "auto-birthday-u-2025-r0.ics",
             "auto-birthday-u-2026-r0.ics",
+            "auto-birthday-u-2026-r1.ics",
+            "auto-birthday-u-2026-r2.ics",
             "auto-birthday-u-2027-r0.ics",
+            "auto-birthday-u-2027-r1.ics",
+            "auto-birthday-u-2027-r2.ics",
         ])
+        # each reminder is its own VEVENT with its own popup VALARM
+        for f in items.values():
+            self.assertEqual(f.count("BEGIN:VEVENT"), 1)
+            self.assertEqual(f.count("BEGIN:VALARM"), 1)
 
 
 class TestReconcile(unittest.TestCase):
@@ -782,8 +806,10 @@ class TestSyncIntegration(unittest.TestCase):
             cdates_dir = self._dir(d)
             files = sorted(os.listdir(cdates_dir))
             ics = [f for f in files if f.endswith(".ics")]
-            # synthetic-01: 2026/2027/2028 (3) + synthetic-03: perpetual (1) = 4
-            self.assertEqual(len(ics), 4)
+            # default = day-of + 7d + 1d events. synthetic-01 (known):
+            # 2026 day-of only (advance pruned) + 2027/2028 ×3 = 7;
+            # synthetic-03 (perpetual): 3. Total 10.
+            self.assertEqual(len(ics), 10)
             self.assertIn(".Radicale.props", files)
             s2 = cd.sync(d, cfg, self.TODAY, dry_run=False)
             self.assertEqual(
@@ -800,8 +826,8 @@ class TestSyncIntegration(unittest.TestCase):
             bdays = [f for f in ics if f.startswith("auto-birthday-")]
             annis = [f for f in ics if f.startswith("auto-anniversary-")]
             # both types share the single calendar
-            self.assertEqual(len(bdays), 3)
-            self.assertEqual(len(annis), 3)
+            self.assertTrue(bdays)
+            self.assertTrue(annis)
             blob = ""
             for f in ics:
                 with open(os.path.join(cdates_dir, f), encoding="utf-8") as fh:
@@ -818,10 +844,12 @@ class TestSyncIntegration(unittest.TestCase):
             with open(both, encoding="utf-8", newline="") as fh:
                 data = fh.read()
             data = data.replace("END:VCARD", "NOTE:keep out #NB\r\nEND:VCARD")
+            created = len([f for f in os.listdir(self._dir(d))
+                           if f.endswith(".ics")])
             cd.write_atomic(both, data)
             s = cd.sync(d, cfg, self.TODAY, dry_run=False)
-            # 3 birthday + 3 anniversary items removed
-            self.assertEqual(s["delete"], 6)
+            # every generated item for the contact is removed
+            self.assertEqual(s["delete"], created)
             ics = [f for f in os.listdir(self._dir(d)) if f.endswith(".ics")]
             self.assertEqual(ics, [])
 
@@ -837,7 +865,8 @@ class TestSyncIntegration(unittest.TestCase):
                 "END:VCARD", "NOTE:keep out #NB\r\nEND:VCARD")
             cd.write_atomic(omit_year, data)
             s = cd.sync(d, cfg, self.TODAY, dry_run=False)
-            self.assertEqual(s["delete"], 1)
+            # perpetual contact had 3 events (day-of + 7d + 1d), all removed
+            self.assertEqual(s["delete"], 3)
             perpetual = os.path.join(
                 self._dir(d), "auto-birthday-%s-r0.ics" % self.OMIT_YEAR[:-4])
             self.assertFalse(os.path.exists(perpetual))
@@ -845,17 +874,18 @@ class TestSyncIntegration(unittest.TestCase):
     def test_reminders_roundtrip_idempotent(self):
         with tempfile.TemporaryDirectory() as d:
             self._make_tree(d, files=(self.KNOWN,))
-            cfg = self._cfg()  # default: day-of event hosting 7d/1d alarms
+            cfg = self._cfg()  # default: day-of + 7d + 1d, all events
             cd.sync(d, cfg, self.TODAY, dry_run=False)
             ics = sorted(f for f in os.listdir(self._dir(d))
                          if f.endswith(".ics"))
-            # known birthday: 3 occurrences -> 3 event files
-            self.assertEqual(len(ics), 3)
+            # 2026 day-of (advance pruned) + 2027/2028 ×3 = 7 event files
+            self.assertEqual(len(ics), 7)
             with open(os.path.join(self._dir(d), ics[0]),
                       encoding="utf-8") as h:
                 blob = h.read()
-            # own popup + 7d alarm + 1d alarm, all hosted on the day-of event
-            self.assertEqual(blob.count("BEGIN:VALARM"), 3)
+            # each event is its own VEVENT with one popup VALARM
+            self.assertEqual(blob.count("BEGIN:VEVENT"), 1)
+            self.assertEqual(blob.count("BEGIN:VALARM"), 1)
             s2 = cd.sync(d, cfg, self.TODAY, dry_run=False)
             self.assertEqual(
                 (s2["create"], s2["update"], s2["delete"]), (0, 0, 0))

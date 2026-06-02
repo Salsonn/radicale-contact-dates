@@ -23,10 +23,10 @@
         {"days_before": 0, "at": "11:30", "type": "event",
          "template": "🎂 {name} is jarig ({count} jaar)",
          "template_unknown": "🎂 {name} is jarig"},
-        {"days_before": 7, "at": "11:30", "type": "alarm",
+        {"days_before": 7, "at": "11:30", "type": "event",
          "template": "🎂 {name} is volgende week jarig op {date} ({count} jaar)",
          "template_unknown": "🎂 {name} is volgende week jarig op {date}"},
-        {"days_before": 1, "at": "11:30", "type": "alarm",
+        {"days_before": 1, "at": "11:30", "type": "event",
          "template": "🎂 {name} is morgen jarig ({count} jaar)",
          "template_unknown": "🎂 {name} is morgen jarig"}
       ]
@@ -40,10 +40,10 @@
         {"days_before": 0, "at": "11:30", "type": "event",
          "template": "💍 {name} — {count}e jubileum",
          "template_unknown": "💍 {name} — jubileum"},
-        {"days_before": 7, "at": "11:30", "type": "alarm",
+        {"days_before": 7, "at": "11:30", "type": "event",
          "template": "💍 {name} — volgende week {count}e jubileum op {date}",
          "template_unknown": "💍 {name} — volgende week jubileum op {date}"},
-        {"days_before": 1, "at": "11:30", "type": "alarm",
+        {"days_before": 1, "at": "11:30", "type": "event",
          "template": "💍 {name} — morgen {count}e jubileum",
          "template_unknown": "💍 {name} — morgen jubileum"}
       ]
@@ -56,10 +56,10 @@
         {"days_before": 0, "at": "11:30", "type": "event",
          "template": "📅 {name} — {label} ({count})",
          "template_unknown": "📅 {name} — {label}"},
-        {"days_before": 7, "at": "11:30", "type": "alarm",
+        {"days_before": 7, "at": "11:30", "type": "event",
          "template": "📅 {name} — {label} op {date} ({count})",
          "template_unknown": "📅 {name} — {label} op {date}"},
-        {"days_before": 1, "at": "11:30", "type": "alarm",
+        {"days_before": 1, "at": "11:30", "type": "event",
          "template": "📅 {name} — morgen {label} ({count})",
          "template_unknown": "📅 {name} — morgen {label}"}
       ]

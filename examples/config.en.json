@@ -23,10 +23,10 @@
         {"days_before": 0, "at": "11:30", "type": "event",
          "template": "🎂 {name} turns {count}",
          "template_unknown": "🎂 {name}'s birthday"},
-        {"days_before": 7, "at": "11:30", "type": "alarm",
+        {"days_before": 7, "at": "11:30", "type": "event",
          "template": "🎂 {name} turns {count} on {date}",
          "template_unknown": "🎂 {name}'s birthday on {date}"},
-        {"days_before": 1, "at": "11:30", "type": "alarm",
+        {"days_before": 1, "at": "11:30", "type": "event",
          "template": "🎂 {name} turns {count} tomorrow",
          "template_unknown": "🎂 {name}'s birthday tomorrow"}
       ]
@@ -40,10 +40,10 @@
         {"days_before": 0, "at": "11:30", "type": "event",
          "template": "💍 {name}'s {count_english} anniversary",
          "template_unknown": "💍 {name}'s anniversary"},
-        {"days_before": 7, "at": "11:30", "type": "alarm",
+        {"days_before": 7, "at": "11:30", "type": "event",
          "template": "💍 {name}'s {count_english} anniversary on {date}",
          "template_unknown": "💍 {name}'s anniversary on {date}"},
-        {"days_before": 1, "at": "11:30", "type": "alarm",
+        {"days_before": 1, "at": "11:30", "type": "event",
          "template": "💍 {name}'s {count_english} anniversary tomorrow",
          "template_unknown": "💍 {name}'s anniversary tomorrow"}
       ]
@@ -56,10 +56,10 @@
         {"days_before": 0, "at": "11:30", "type": "event",
          "template": "📅 {name} — {label} ({count})",
          "template_unknown": "📅 {name} — {label}"},
-        {"days_before": 7, "at": "11:30", "type": "alarm",
+        {"days_before": 7, "at": "11:30", "type": "event",
          "template": "📅 {name} — {label} ({count}) on {date}",
          "template_unknown": "📅 {name} — {label} on {date}"},
-        {"days_before": 1, "at": "11:30", "type": "alarm",
+        {"days_before": 1, "at": "11:30", "type": "event",
          "template": "📅 {name} — {label} ({count}) tomorrow",
          "template_unknown": "📅 {name} — {label} tomorrow"}
       ]
