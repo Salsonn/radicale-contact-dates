@@ -12,6 +12,7 @@ jobs:
       - name: Build and push image for ${{ github.repository }}
         run: |
           declare -l repo=${{ github.repository }}
-          docker login --username SalSonn --password ${{ secrets.ACCESS_TOKEN }} ghcr.io 
+          declare -l org=${{ github.repository_owner }}
+          docker login --username $org --password ${{ secrets.ACCESS_TOKEN }} ghcr.io 
           docker build . --tag ghcr.io/$repo:latest
           docker push ghcr.io/$repo:latest
