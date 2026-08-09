@@ -1,0 +1,31 @@
+services:
+  radicale:
+    image: tomsquest/docker-radicale:latest
+    container_name: radicale
+    logging:
+      driver: local
+    environment:
+      RADICALE_CONFIG_SERVER_HOSTS: 0.0.0.0:5232
+      RADICALE_CONFIG_AUTH_TYPE: none
+      RADICALE_CONFIG_STORAGE_FILESYSTEM_FOLDER: /data/collections
+    restart: always
+    volumes:
+      - ./config/radicale/config:/etc/radicale/config
+      - radicale_data:/data
+
+  radicale-contact-dates:
+    build: .
+    container_name: contact-dates
+    depends_on:
+      - radicale
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./examples/config.en.json:/config/config.json
+      - radicale_data:/data
+    restart: no
+
+volumes:
+  radicale_data:
+    name: radicale_data
