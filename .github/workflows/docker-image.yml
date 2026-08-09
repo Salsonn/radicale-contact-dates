@@ -11,6 +11,8 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build and push image for ${{ github.repository }}
         run: |
+          set repo=
+          declare -l repo=${{ github.repository }}
           docker login --username SalSonn --password ${{ secrets.ACCESS_TOKEN }} ghcr.io 
-          docker build . --tag ghcr.io/${{ github.repository }}:latest
-          docker push ghcr.io/${{ github.repository }}:latest
+          docker build . --tag ghcr.io/$repo:latest
+          docker push ghcr.io/$repo:latest
